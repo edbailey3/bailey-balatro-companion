@@ -1,5 +1,5 @@
-import { AppState, RANK_TO_VAL, VAL_TO_RANK } from './state.js';
-import { hypergeometricCdf, multivariateHypergeometricCdf } from './math.js';
+import { AppState, RANK_TO_VAL, VAL_TO_RANK, STRAIGHT_RANGES, ALL_HAND_TYPES } from './state.js';
+import { hypergeometricCdf, calculateMultivariateHypergeometric } from './math.js';
 
 const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King', 'Ace'];
 const SUITS = ['Spades', 'Hearts', 'Diamonds', 'Clubs'];
@@ -11,7 +11,6 @@ const SUIT_SYMBOLS = {
   'Clubs': '♣'
 };
 
-// Instantiate core state manager
 const state = new AppState();
 
 // DOM References
@@ -20,27 +19,12 @@ const handDockEl = document.getElementById('hand-dock');
 const resetBtn = document.getElementById('reset-btn');
 const clearBtn = document.getElementById('clear-btn');
 const autoDetectToggle = document.getElementById('auto-detect-toggle');
-const configsControlsEl = document.getElementById('configs-controls');
-const oddsPercentageEl = document.getElementById('odds-percentage');
-const gaugeProgressEl = document.getElementById('gauge-progress');
-const telemetryNEl = document.getElementById('telemetry-N');
-const telemetryKEl = document.getElementById('telemetry-K');
-const telemetrynEl = document.getElementById('telemetry-n');
-const telemetrykEl = document.getElementById('telemetry-k');
+const chasingMatrixEl = document.getElementById('chasing-matrix');
+const globalTelemetryNEl = document.getElementById('global-telemetry-N');
+const globalTelemetrynEl = document.getElementById('global-telemetry-n');
 const engineStatusEl = document.getElementById('engine-status-text');
 
-// Initialize hand type buttons
-const targetToggles = document.querySelectorAll('.target-toggle');
-
-targetToggles.forEach(btn => {
-  btn.addEventListener('click', () => {
-    targetToggles.forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    state.setTargetHandType(btn.dataset.hand);
-  });
-});
-
-// Setup actions
+// Setup action buttons
 resetBtn.addEventListener('click', () => state.resetToStandard());
 clearBtn.addEventListener('click', () => state.clearDeck());
 
@@ -57,11 +41,10 @@ autoDetectToggle.addEventListener('click', () => {
   }
 });
 
-// Render the 13x4 Deck Inventory Matrix Grid
+// Render 13x4 Deck Inventory Matrix Grid
 function renderDeckMatrix() {
   matrixGridEl.innerHTML = '';
   
-  // Count existing card instances in state.totalDeck
   const countsMap = {};
   for (const card of state.totalDeck) {
     const key = `${card.base_rank}_${card.base_suit}`;
@@ -87,13 +70,11 @@ function renderDeckMatrix() {
       cell.appendChild(rankSpan);
       cell.appendChild(suitSpan);
 
-      // Badge showing active count
       const badge = document.createElement('div');
       badge.className = `matrix-cell-count-badge ${count === 0 ? 'zero' : ''}`;
       badge.textContent = `x${count}`;
       cell.appendChild(badge);
 
-      // Adjusters Revealed on Hover
       const adjusters = document.createElement('div');
       adjusters.className = 'matrix-cell-adjusters';
 
@@ -135,7 +116,6 @@ function renderDeckMatrix() {
       adjusters.appendChild(container);
       cell.appendChild(adjusters);
 
-      // Cell click behaves as Draw to Hand Dock
       cell.addEventListener('click', () => {
         state.addCardToHand(rank, suit);
       });
@@ -145,7 +125,6 @@ function renderDeckMatrix() {
   }
 }
 
-// Convert rank strings to standard labels (e.g. Jack -> J, 10 -> 10)
 function getRankLabel(rank) {
   if (rank === 'Jack') return 'J';
   if (rank === 'Queen') return 'Q';
@@ -207,168 +186,325 @@ function renderHandDock() {
   }
 }
 
-// Render the Target Dropdown Config Sub-Selectors
-function renderTargetConfigs() {
-  configsControlsEl.innerHTML = '';
+// Render the Chasing Matrix Layout
+function renderChasingMatrix() {
+  chasingMatrixEl.innerHTML = '';
   const targets = state.activeTargets;
   const isAuto = state.autoDetectTargets;
-
-  if (state.targetHandType === 'Flush') {
-    // Suit Selector
-    configsControlsEl.appendChild(createDropdownControl(
-      'Target Suit', 
-      SUITS, 
-      targets.targetSuit, 
-      isAuto, 
-      (val) => state.updateTargetParams({ targetSuit: val })
-    ));
-  } else if (state.targetHandType === 'Four of a Kind') {
-    // Rank Selector
-    configsControlsEl.appendChild(createDropdownControl(
-      'Target Rank', 
-      RANKS, 
-      targets.targetRank, 
-      isAuto, 
-      (val) => state.updateTargetParams({ targetRank: val })
-    ));
-  } else if (state.targetHandType === 'Full House') {
-    // Rank A and Rank B Selectors
-    configsControlsEl.appendChild(createDropdownControl(
-      'Rank A (Need 3)', 
-      RANKS, 
-      targets.rankA, 
-      isAuto, 
-      (val) => {
-        if (val === state.targetParams.rankB) {
-          // Keep distinct
-          const nextB = val === 'Ace' ? 'King' : 'Ace';
-          state.updateTargetParams({ rankA: val, rankB: nextB });
-        } else {
-          state.updateTargetParams({ rankA: val });
-        }
-      }
-    ));
-    configsControlsEl.appendChild(createDropdownControl(
-      'Rank B (Need 2)', 
-      RANKS, 
-      targets.rankB, 
-      isAuto, 
-      (val) => {
-        if (val === state.targetParams.rankA) {
-          // Keep distinct
-          const nextA = val === 'Ace' ? 'King' : 'Ace';
-          state.updateTargetParams({ rankB: val, rankA: nextA });
-        } else {
-          state.updateTargetParams({ rankB: val });
-        }
-      }
-    ));
-  } else if (state.targetHandType === 'Straight (Outside)') {
-    // Lower Out and Upper Out Selectors
-    configsControlsEl.appendChild(createDropdownControl(
-      'Lower Out Rank', 
-      RANKS, 
-      targets.rankLower, 
-      isAuto, 
-      (val) => state.updateTargetParams({ rankLower: val })
-    ));
-    configsControlsEl.appendChild(createDropdownControl(
-      'Upper Out Rank', 
-      RANKS, 
-      targets.rankUpper, 
-      isAuto, 
-      (val) => state.updateTargetParams({ rankUpper: val })
-    ));
-  } else if (state.targetHandType === 'Straight (Inside)') {
-    // Inside Out Selector
-    configsControlsEl.appendChild(createDropdownControl(
-      'Inside Out Rank', 
-      RANKS, 
-      targets.rankInside, 
-      isAuto, 
-      (val) => state.updateTargetParams({ rankInside: val })
-    ));
-  }
-}
-
-// Utility to generate a dropdown selector with proper bindings
-function createDropdownControl(label, options, selectedValue, disabled, onChange) {
-  const container = document.createElement('div');
-  container.className = 'config-control-group';
-
-  const lbl = document.createElement('label');
-  lbl.textContent = label;
-  if (disabled) lbl.textContent += ' (Auto)';
-
-  const wrapper = document.createElement('div');
-  wrapper.className = 'config-select-wrapper';
-
-  const select = document.createElement('select');
-  select.className = 'config-select';
-  if (disabled) select.disabled = true;
-
-  for (const opt of options) {
-    const el = document.createElement('option');
-    el.value = opt;
-    el.textContent = opt;
-    if (opt === selectedValue) {
-      el.selected = true;
-    }
-    select.appendChild(el);
-  }
-
-  select.addEventListener('change', (e) => {
-    onChange(e.target.value);
-  });
-
-  wrapper.appendChild(select);
-  container.appendChild(lbl);
-  container.appendChild(wrapper);
-  return container;
-}
-
-// Perform Real-Time Hypergeometric Computations
-function runCalculations() {
-  const t0 = performance.now();
 
   const N = state.remainingDeck.length;
   const n = state.selectedForDiscard.size;
   const kept = state.keptHand;
   const remDeck = state.remainingDeck;
-  const targets = state.activeTargets;
-  const handType = state.targetHandType;
 
-  let K = 0;
-  let k = 0;
-  let probability = 0;
+  const t0 = performance.now();
 
-  // Track telemetry strings (for cases like Full House where K/k are dual values)
-  let kDisp = '0';
+  for (const handType of ALL_HAND_TYPES) {
+    const isEnabled = state.enabledHands.has(handType);
+    const row = document.createElement('div');
+    
+    // 1. Calculate odds and telemetry stats for this hand type
+    let KDisp = '0';
+    let kDisp = '0';
+    let prob = 0;
+
+    if (isEnabled) {
+      const calcResult = calculateHandOdds(handType, targets, N, n, kept, remDeck);
+      prob = calcResult.prob;
+      KDisp = calcResult.KDisp;
+      kDisp = calcResult.kDisp;
+    }
+
+    // Set styling class names depending on probability thresholds
+    let probClass = 'prob-none';
+    if (isEnabled) {
+      if (prob > 0.75) probClass = 'prob-high';
+      else if (prob > 0.4) probClass = 'prob-med';
+      else if (prob > 0.15) probClass = 'prob-low';
+    }
+
+    row.className = `chasing-row ${isEnabled ? 'active' : 'inactive'} ${probClass}`;
+
+    // Column 1: Switch checkbox
+    const switchDiv = document.createElement('div');
+    switchDiv.className = 'chasing-switch-container';
+    
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.className = 'chasing-checkbox';
+    chk.checked = isEnabled;
+    chk.addEventListener('change', () => {
+      state.toggleHandEnabled(handType);
+    });
+    switchDiv.appendChild(chk);
+    row.appendChild(switchDiv);
+
+    // Column 2: Hand Name
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'chasing-hand-name';
+    nameSpan.textContent = handType;
+    row.appendChild(nameSpan);
+
+    // Column 3: Config sub-selectors
+    const controlsDiv = document.createElement('div');
+    controlsDiv.className = 'chasing-controls';
+    renderRowControls(handType, targets, isAuto, isEnabled, controlsDiv);
+    row.appendChild(controlsDiv);
+
+    // Column 4: Progress bar and small stats
+    const progressWrapper = document.createElement('div');
+    progressWrapper.className = 'chasing-progress-wrapper';
+
+    const progressBg = document.createElement('div');
+    progressBg.className = 'chasing-progress-bg';
+
+    const progressFill = document.createElement('div');
+    progressFill.className = 'chasing-progress-fill';
+    if (isEnabled) {
+      progressFill.style.width = `${prob * 100}%`;
+    }
+    progressBg.appendChild(progressFill);
+
+    const statsText = document.createElement('span');
+    statsText.className = 'chasing-telemetry-text';
+    if (isEnabled) {
+      statsText.textContent = `N: ${N} | K: ${KDisp} | n: ${n} | k: ${kDisp}`;
+    } else {
+      statsText.textContent = 'Disabled';
+    }
+
+    progressWrapper.appendChild(progressBg);
+    progressWrapper.appendChild(statsText);
+    row.appendChild(progressWrapper);
+
+    // Column 5: Odds percentage display
+    const oddsSpan = document.createElement('span');
+    oddsSpan.className = 'chasing-odds-percentage';
+    if (isEnabled) {
+      oddsSpan.textContent = `${(prob * 100).toFixed(2)}%`;
+    } else {
+      oddsSpan.textContent = '—';
+    }
+    row.appendChild(oddsSpan);
+
+    chasingMatrixEl.appendChild(row);
+  }
+
+  const t1 = performance.now();
+  const latency = t1 - t0;
+
+  // Update global telemetry items
+  globalTelemetryNEl.textContent = N.toString();
+  globalTelemetrynEl.textContent = n.toString();
+
+  engineStatusEl.textContent = `READY (${latency.toFixed(2)}ms)`;
+  if (latency > 50) {
+    engineStatusEl.style.color = 'var(--neon-red)';
+  } else {
+    engineStatusEl.style.color = 'var(--neon-blue)';
+  }
+}
+
+// Sub-selectors layout helper
+function renderRowControls(handType, targets, isAuto, isEnabled, container) {
+  const disabled = isAuto || !isEnabled;
+
+  if (handType === 'Flush' || handType === 'Royal Flush') {
+    const key = handType === 'Flush' ? 'flush_suit' : 'royal_suit';
+    if (isAuto) {
+      container.appendChild(createBadge(targets[key]));
+    } else {
+      container.appendChild(createMiniSelect(SUITS, targets[key], disabled, (val) => {
+        state.updateTargetParams({ [key]: val });
+      }));
+    }
+  } else if (handType === 'Pair' || handType === 'Three of a Kind' || handType === 'Four of a Kind' || handType === 'Five of a Kind') {
+    const key = handType === 'Pair' ? 'pair_rank' : (handType === 'Three of a Kind' ? 'three_rank' : (handType === 'Four of a Kind' ? 'four_rank' : 'five_rank'));
+    if (isAuto) {
+      container.appendChild(createBadge(targets[key]));
+    } else {
+      container.appendChild(createMiniSelect(RANKS, targets[key], disabled, (val) => {
+        state.updateTargetParams({ [key]: val });
+      }));
+    }
+  } else if (handType === 'Two Pair' || handType === 'Full House') {
+    const prefix = handType === 'Two Pair' ? 'twopair' : 'fh';
+    if (isAuto) {
+      container.appendChild(createBadge(targets[`${prefix}_rankA`]));
+      container.appendChild(createBadge(targets[`${prefix}_rankB`]));
+    } else {
+      container.appendChild(createMiniSelect(RANKS, targets[`${prefix}_rankA`], disabled, (val) => {
+        if (val === state.targetParams[`${prefix}_rankB`]) {
+          const nextB = val === 'Ace' ? 'King' : 'Ace';
+          state.updateTargetParams({ [`${prefix}_rankA`]: val, [`${prefix}_rankB`]: nextB });
+        } else {
+          state.updateTargetParams({ [`${prefix}_rankA`]: val });
+        }
+      }));
+      container.appendChild(createMiniSelect(RANKS, targets[`${prefix}_rankB`], disabled, (val) => {
+        if (val === state.targetParams[`${prefix}_rankA`]) {
+          const nextA = val === 'Ace' ? 'King' : 'Ace';
+          state.updateTargetParams({ [`${prefix}_rankB`]: val, [`${prefix}_rankA`]: nextA });
+        } else {
+          state.updateTargetParams({ [`${prefix}_rankB`]: val });
+        }
+      }));
+    }
+  } else if (handType === 'Straight') {
+    const options = STRAIGHT_RANGES.map(r => r.label);
+    if (isAuto) {
+      container.appendChild(createBadge(targets.straight_range));
+    } else {
+      container.appendChild(createMiniSelect(options, targets.straight_range, disabled, (val) => {
+        state.updateTargetParams({ straight_range: val });
+      }));
+    }
+  } else if (handType === 'Flush House') {
+    if (isAuto) {
+      container.appendChild(createBadge(targets.flushhouse_suit));
+      container.appendChild(createBadge(targets.flushhouse_rankA));
+      container.appendChild(createBadge(targets.flushhouse_rankB));
+    } else {
+      container.appendChild(createMiniSelect(SUITS, targets.flushhouse_suit, disabled, (val) => {
+        state.updateTargetParams({ flushhouse_suit: val });
+      }));
+      container.appendChild(createMiniSelect(RANKS, targets.flushhouse_rankA, disabled, (val) => {
+        if (val === state.targetParams.flushhouse_rankB) {
+          const nextB = val === 'Ace' ? 'King' : 'Ace';
+          state.updateTargetParams({ flushhouse_rankA: val, flushhouse_rankB: nextB });
+        } else {
+          state.updateTargetParams({ flushhouse_rankA: val });
+        }
+      }));
+      container.appendChild(createMiniSelect(RANKS, targets.flushhouse_rankB, disabled, (val) => {
+        if (val === state.targetParams.flushhouse_rankA) {
+          const nextA = val === 'Ace' ? 'King' : 'Ace';
+          state.updateTargetParams({ flushhouse_rankB: val, flushhouse_rankA: nextA });
+        } else {
+          state.updateTargetParams({ flushhouse_rankB: val });
+        }
+      }));
+    }
+  } else if (handType === 'Flush Five') {
+    if (isAuto) {
+      container.appendChild(createBadge(targets.flushfive_suit));
+      container.appendChild(createBadge(targets.flushfive_rank));
+    } else {
+      container.appendChild(createMiniSelect(SUITS, targets.flushfive_suit, disabled, (val) => {
+        state.updateTargetParams({ flushfive_suit: val });
+      }));
+      container.appendChild(createMiniSelect(RANKS, targets.flushfive_rank, disabled, (val) => {
+        state.updateTargetParams({ flushfive_rank: val });
+      }));
+    }
+  } else {
+    // High Card, no controls needed
+    container.textContent = 'None';
+  }
+}
+
+function createBadge(text) {
+  const span = document.createElement('span');
+  span.className = 'chasing-mini-badge auto';
+  span.textContent = text;
+  return span;
+}
+
+function createMiniSelect(options, selectedVal, disabled, onChange) {
+  const sel = document.createElement('select');
+  sel.className = 'chasing-mini-select';
+  sel.disabled = disabled;
+  for (const opt of options) {
+    const o = document.createElement('option');
+    o.value = opt;
+    o.textContent = opt;
+    if (opt === selectedVal) {
+      o.selected = true;
+    }
+    sel.appendChild(o);
+  }
+  sel.addEventListener('change', (e) => {
+    onChange(e.target.value);
+  });
+  return sel;
+}
+
+// Hand probability parser routing to unified multivariate solver
+function calculateHandOdds(handType, targets, N, n, kept, remDeck) {
   let KDisp = '0';
+  let kDisp = '0';
+  let prob = 0;
 
-  if (handType === 'Flush') {
-    const suit = targets.targetSuit;
-    K = remDeck.filter(c => c.base_suit === suit).length;
-    const cKeep = kept.filter(c => c.base_suit === suit).length;
-    k = Math.max(0, 5 - cKeep);
+  if (handType === 'High Card') {
+    const k = kept.length >= 1 ? 0 : 1;
+    const K = N; // Any card satisfies High Card
+    prob = hypergeometricCdf(k, N, K, n);
+    KDisp = K.toString();
+    kDisp = k.toString();
 
-    probability = hypergeometricCdf(k, N, K, n);
+  } else if (handType === 'Pair') {
+    const rank = targets.pair_rank;
+    const K = remDeck.filter(c => c.base_rank === rank).length;
+    const c = kept.filter(c => c.base_rank === rank).length;
+    const k = Math.max(0, 2 - c);
+    
+    prob = hypergeometricCdf(k, N, K, n);
+    KDisp = K.toString();
+    kDisp = k.toString();
+
+  } else if (handType === 'Three of a Kind') {
+    const rank = targets.three_rank;
+    const K = remDeck.filter(c => c.base_rank === rank).length;
+    const c = kept.filter(c => c.base_rank === rank).length;
+    const k = Math.max(0, 3 - c);
+    
+    prob = hypergeometricCdf(k, N, K, n);
     KDisp = K.toString();
     kDisp = k.toString();
 
   } else if (handType === 'Four of a Kind') {
-    const rank = targets.targetRank;
-    K = remDeck.filter(c => c.base_rank === rank).length;
-    const cKeep = kept.filter(c => c.base_rank === rank).length;
-    k = Math.max(0, 4 - cKeep);
-
-    probability = hypergeometricCdf(k, N, K, n);
+    const rank = targets.four_rank;
+    const K = remDeck.filter(c => c.base_rank === rank).length;
+    const c = kept.filter(c => c.base_rank === rank).length;
+    const k = Math.max(0, 4 - c);
+    
+    prob = hypergeometricCdf(k, N, K, n);
     KDisp = K.toString();
     kDisp = k.toString();
 
+  } else if (handType === 'Five of a Kind') {
+    const rank = targets.five_rank;
+    const K = remDeck.filter(c => c.base_rank === rank).length;
+    const c = kept.filter(c => c.base_rank === rank).length;
+    const k = Math.max(0, 5 - c);
+    
+    prob = hypergeometricCdf(k, N, K, n);
+    KDisp = K.toString();
+    kDisp = k.toString();
+
+  } else if (handType === 'Two Pair') {
+    const rA = targets.twopair_rankA;
+    const rB = targets.twopair_rankB;
+
+    const KA = remDeck.filter(c => c.base_rank === rA).length;
+    const KB = remDeck.filter(c => c.base_rank === rB).length;
+
+    const cA = kept.filter(c => c.base_rank === rA).length;
+    const cB = kept.filter(c => c.base_rank === rB).length;
+
+    const kA = Math.max(0, 2 - cA);
+    const kB = Math.max(0, 2 - cB);
+
+    prob = calculateMultivariateHypergeometric(N, n, [
+      { K: KA, k: kA },
+      { K: KB, k: kB }
+    ]);
+    KDisp = `${KA}/${KB}`;
+    kDisp = `${kA}/${kB}`;
+
   } else if (handType === 'Full House') {
-    const rA = targets.rankA;
-    const rB = targets.rankB;
+    const rA = targets.fh_rankA;
+    const rB = targets.fh_rankB;
 
     const KA = remDeck.filter(c => c.base_rank === rA).length;
     const KB = remDeck.filter(c => c.base_rank === rB).length;
@@ -379,95 +515,128 @@ function runCalculations() {
     const kA = Math.max(0, 3 - cA);
     const kB = Math.max(0, 2 - cB);
 
-    probability = multivariateHypergeometricCdf(kA, kB, N, KA, KB, n);
+    prob = calculateMultivariateHypergeometric(N, n, [
+      { K: KA, k: kA },
+      { K: KB, k: kB }
+    ]);
+    KDisp = `${KA}/${KB}`;
+    kDisp = `${kA}/${kB}`;
+
+  } else if (handType === 'Flush') {
+    const suit = targets.flush_suit;
+    const K = remDeck.filter(c => c.base_suit === suit).length;
+    const c = kept.filter(c => c.base_suit === suit).length;
+    const k = Math.max(0, 5 - c);
+
+    prob = hypergeometricCdf(k, N, K, n);
+    KDisp = K.toString();
+    kDisp = k.toString();
+
+  } else if (handType === 'Flush House') {
+    const suit = targets.flushhouse_suit;
+    const rA = targets.flushhouse_rankA;
+    const rB = targets.flushhouse_rankB;
+
+    const KA = remDeck.filter(c => c.base_rank === rA && c.base_suit === suit).length;
+    const KB = remDeck.filter(c => c.base_rank === rB && c.base_suit === suit).length;
+
+    const cA = kept.filter(c => c.base_rank === rA && c.base_suit === suit).length;
+    const cB = kept.filter(c => c.base_rank === rB && c.base_suit === suit).length;
+
+    const kA = Math.max(0, 3 - cA);
+    const kB = Math.max(0, 2 - cB);
+
+    prob = calculateMultivariateHypergeometric(N, n, [
+      { K: KA, k: kA },
+      { K: KB, k: kB }
+    ]);
+    KDisp = `${KA}/${KB}`;
+    kDisp = `${kA}/${kB}`;
+
+  } else if (handType === 'Flush Five') {
+    const suit = targets.flushfive_suit;
+    const rank = targets.flushfive_rank;
+
+    const K = remDeck.filter(c => c.base_rank === rank && c.base_suit === suit).length;
+    const c = kept.filter(c => c.base_rank === rank && c.base_suit === suit).length;
+    const k = Math.max(0, 5 - c);
+
+    prob = hypergeometricCdf(k, N, K, n);
+    KDisp = K.toString();
+    kDisp = k.toString();
+
+  } else if (handType === 'Straight' || handType === 'Straight Flush') {
+    const rangeLabel = targets.straight_range;
+    const suit = (handType === 'Straight Flush') ? targets.flush_suit : null;
     
-    // Telemetry representations
-    KDisp = `${KA} / ${KB}`;
-    kDisp = `${kA} / ${kB}`;
+    const rangeObj = STRAIGHT_RANGES.find(r => r.label === rangeLabel);
+    const rangeVals = rangeObj ? rangeObj.vals : [10, 11, 12, 13, 14];
 
-  } else if (handType === 'Straight (Outside)') {
-    const rL = targets.rankLower;
-    const rU = targets.rankUpper;
+    // Build the 5 distinct categories for the multivariate solver
+    const targetArr = [];
+    const kVals = [];
+    const KVals = [];
 
-    K = remDeck.filter(c => c.base_rank === rL || c.base_rank === rU).length;
-    const cKeep = kept.filter(c => c.base_rank === rL || c.base_rank === rU).length;
-    k = cKeep >= 1 ? 0 : 1;
+    for (const val of rangeVals) {
+      const rank = VAL_TO_RANK[val];
+      
+      // Kept count of this card
+      let hasCard = false;
+      if (suit) {
+        hasCard = kept.some(c => c.base_rank === rank && c.base_suit === suit);
+      } else {
+        hasCard = kept.some(c => c.base_rank === rank);
+      }
 
-    probability = hypergeometricCdf(k, N, K, n);
-    KDisp = K.toString();
-    kDisp = k.toString();
+      const k_c = hasCard ? 0 : 1;
+      
+      // Remdeck count
+      let K_c = 0;
+      if (suit) {
+        K_c = remDeck.filter(c => c.base_rank === rank && c.base_suit === suit).length;
+      } else {
+        K_c = remDeck.filter(c => c.base_rank === rank).length;
+      }
 
-  } else if (handType === 'Straight (Inside)') {
-    const rI = targets.rankInside;
-
-    K = remDeck.filter(c => c.base_rank === rI).length;
-    const cKeep = kept.filter(c => c.base_rank === rI).length;
-    k = cKeep >= 1 ? 0 : 1;
-
-    probability = hypergeometricCdf(k, N, K, n);
-    KDisp = K.toString();
-    kDisp = k.toString();
-  }
-
-  const t1 = performance.now();
-  const latency = t1 - t0;
-
-  // Update odds displays
-  updateOddsUI(probability);
-
-  // Update telemetry feed
-  telemetryNEl.textContent = N.toString();
-  telemetryKEl.textContent = KDisp;
-  telemetrynEl.textContent = n.toString();
-  telemetrykEl.textContent = kDisp;
-
-  engineStatusEl.textContent = `READY (${latency.toFixed(2)}ms)`;
-  
-  if (latency > 50) {
-    console.warn(`Hypergeometric engine exceeded 50ms latency threshold: ${latency.toFixed(2)}ms`);
-    engineStatusEl.style.color = 'var(--neon-red)';
-  } else {
-    engineStatusEl.style.color = 'var(--neon-blue)';
-  }
-}
-
-// Update the odds ring gauge and visual percentage representation
-function updateOddsUI(probability) {
-  const percentText = (probability * 100).toFixed(2) + '%';
-  oddsPercentageEl.textContent = percentText;
-
-  // Update progress ring offset
-  // Radius is 90. Circumference is 2 * PI * 90 = 565.4867
-  const circumference = 2 * Math.PI * 90;
-  const offset = circumference - (probability * circumference);
-  gaugeProgressEl.style.strokeDashoffset = offset.toString();
-
-  // Color coordinate the percentage font drop shadow depending on odds magnitude
-  if (probability > 0.75) {
-    oddsPercentageEl.style.textShadow = '0 0 20px rgba(57, 255, 20, 0.4)';
-    oddsPercentageEl.style.color = 'var(--neon-green)';
-  } else if (probability > 0.4) {
-    oddsPercentageEl.style.textShadow = '0 0 20px rgba(0, 229, 255, 0.4)';
-    oddsPercentageEl.style.color = 'var(--neon-blue)';
-  } else if (probability > 0.15) {
-    oddsPercentageEl.style.textShadow = '0 0 20px rgba(255, 215, 0, 0.4)';
-    oddsPercentageEl.style.color = 'var(--neon-gold)';
-  } else {
-    oddsPercentageEl.style.textShadow = '0 0 20px rgba(255, 62, 62, 0.4)';
-    oddsPercentageEl.style.color = 'var(--neon-red)';
-  }
-}
-
-// Sync UI active hand selection button states on reload
-function syncHandTypeUI() {
-  targetToggles.forEach(btn => {
-    if (btn.dataset.hand === state.targetHandType) {
-      btn.classList.add('active');
-    } else {
-      btn.classList.remove('active');
+      targetArr.push({ K: K_c, k: k_c });
+      kVals.push(k_c);
+      KVals.push(K_c);
     }
-  });
 
+    prob = calculateMultivariateHypergeometric(N, n, targetArr);
+    KDisp = KVals.join(',');
+    kDisp = kVals.join(',');
+
+  } else if (handType === 'Royal Flush') {
+    const suit = targets.royal_suit;
+    const rangeVals = [10, 11, 12, 13, 14];
+
+    const targetArr = [];
+    const kVals = [];
+    const KVals = [];
+
+    for (const val of rangeVals) {
+      const rank = VAL_TO_RANK[val];
+      const hasCard = kept.some(c => c.base_rank === rank && c.base_suit === suit);
+      const k_c = hasCard ? 0 : 1;
+      
+      const K_c = remDeck.filter(c => c.base_rank === rank && c.base_suit === suit).length;
+
+      targetArr.push({ K: K_c, k: k_c });
+      kVals.push(k_c);
+      KVals.push(K_c);
+    }
+
+    prob = calculateMultivariateHypergeometric(N, n, targetArr);
+    KDisp = KVals.join(',');
+    kDisp = kVals.join(',');
+  }
+
+  return { prob, KDisp, kDisp };
+}
+
+// Sync header button highlight
+function syncHeaderUI() {
   if (state.autoDetectTargets) {
     autoDetectToggle.classList.add('active');
     autoDetectToggle.textContent = 'ON';
@@ -477,11 +646,10 @@ function syncHandTypeUI() {
   }
 }
 
-// Core subscribe binding to trigger full render loop
+// Subscribe reactive bind loop
 state.subscribe((s) => {
-  syncHandTypeUI();
+  syncHeaderUI();
   renderDeckMatrix();
   renderHandDock();
-  renderTargetConfigs();
-  runCalculations();
+  renderChasingMatrix();
 });

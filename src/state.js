@@ -1,5 +1,5 @@
 /**
- * State Management & Outs Identification for Balatro Tactical Companion
+ * State Management & Outs Identification for Balatro Tactical Companion (v1)
  */
 
 const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King', 'Ace'];
@@ -14,6 +14,25 @@ export const VAL_TO_RANK = {
   1: 'Ace', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10',
   11: 'Jack', 12: 'Queen', 13: 'King', 14: 'Ace'
 };
+
+export const STRAIGHT_RANGES = [
+  { label: 'A-2-3-4-5', vals: [1, 2, 3, 4, 5] },
+  { label: '2-3-4-5-6', vals: [2, 3, 4, 5, 6] },
+  { label: '3-4-5-6-7', vals: [3, 4, 5, 6, 7] },
+  { label: '4-5-6-7-8', vals: [4, 5, 6, 7, 8] },
+  { label: '5-6-7-8-9', vals: [5, 6, 7, 8, 9] },
+  { label: '6-7-8-9-10', vals: [6, 7, 8, 9, 10] },
+  { label: '7-8-9-10-J', vals: [7, 8, 9, 10, 11] },
+  { label: '8-9-10-J-Q', did: 8, vals: [8, 9, 10, 11, 12] },
+  { label: '9-10-J-Q-K', vals: [9, 10, 11, 12, 13] },
+  { label: '10-J-Q-K-A', vals: [10, 11, 12, 13, 14] }
+];
+
+export const ALL_HAND_TYPES = [
+  'Flush', 'Straight', 'Full House', 'Four of a Kind', 'Two Pair',
+  'High Card', 'Pair', 'Three of a Kind', 'Royal Flush',
+  'Five of a Kind', 'Flush House', 'Flush Five'
+];
 
 /**
  * Creates a card conformant to the Card Priming State Schema.
@@ -52,12 +71,8 @@ export class AppState {
     this.loadInitialState();
   }
 
-  /**
-   * Register a state change listener
-   */
   subscribe(listener) {
     this.listeners.push(listener);
-    // Trigger immediately for initial render
     listener(this);
     return () => {
       this.listeners = this.listeners.filter(l => l !== listener);
@@ -73,22 +88,18 @@ export class AppState {
 
   loadInitialState() {
     try {
-      const stored = localStorage.getItem('balatro_companion_state');
+      const stored = localStorage.getItem('balatro_companion_state_v1');
       if (stored) {
         const parsed = JSON.parse(stored);
         this.totalDeck = parsed.totalDeck || createStandardDeck();
         this.hand = parsed.hand || [];
         this.selectedForDiscard = new Set(parsed.selectedForDiscard || []);
-        this.targetHandType = parsed.targetHandType || 'Flush';
-        this.targetParams = parsed.targetParams || {
-          targetSuit: 'Spades',
-          targetRank: 'Ace',
-          rankA: 'Ace',
-          rankB: 'King',
-          rankLower: '4',
-          rankUpper: '9',
-          rankInside: '7'
-        };
+        
+        // Parallel active hands tracking
+        const defaultActive = ['Flush', 'Straight', 'Full House', 'Four of a Kind', 'Two Pair'];
+        this.enabledHands = new Set(parsed.enabledHands || defaultActive);
+        
+        this.targetParams = parsed.targetParams || this.getDefaultParams();
         this.autoDetectTargets = parsed.autoDetectTargets !== undefined ? parsed.autoDetectTargets : true;
         this.validateState();
         return;
@@ -101,16 +112,8 @@ export class AppState {
     this.totalDeck = createStandardDeck();
     this.hand = [];
     this.selectedForDiscard = new Set();
-    this.targetHandType = 'Flush';
-    this.targetParams = {
-      targetSuit: 'Spades',
-      targetRank: 'Ace',
-      rankA: 'Ace',
-      rankB: 'King',
-      rankLower: '4',
-      rankUpper: '9',
-      rankInside: '7'
-    };
+    this.enabledHands = new Set(['Flush', 'Straight', 'Full House', 'Four of a Kind', 'Two Pair']);
+    this.targetParams = this.getDefaultParams();
     this.autoDetectTargets = true;
   }
 
@@ -120,22 +123,40 @@ export class AppState {
         totalDeck: this.totalDeck,
         hand: this.hand,
         selectedForDiscard: Array.from(this.selectedForDiscard),
-        targetHandType: this.targetHandType,
+        enabledHands: Array.from(this.enabledHands),
         targetParams: this.targetParams,
         autoDetectTargets: this.autoDetectTargets
       };
-      localStorage.setItem('balatro_companion_state', JSON.stringify(stateObj));
+      localStorage.setItem('balatro_companion_state_v1', JSON.stringify(stateObj));
     } catch (e) {
       console.error('Failed to save state to localStorage', e);
     }
   }
 
+  getDefaultParams() {
+    return {
+      pair_rank: 'Ace',
+      twopair_rankA: 'Ace',
+      twopair_rankB: 'King',
+      three_rank: 'Ace',
+      straight_range: '10-J-Q-K-A',
+      flush_suit: 'Spades',
+      fh_rankA: 'Ace',
+      fh_rankB: 'King',
+      four_rank: 'Ace',
+      five_rank: 'Ace',
+      flushhouse_suit: 'Spades',
+      flushhouse_rankA: 'Ace',
+      flushhouse_rankB: 'King',
+      flushfive_suit: 'Spades',
+      flushfive_rank: 'Ace',
+      royal_suit: 'Spades'
+    };
+  }
+
   validateState() {
-    // Ensure all hand cards exist in totalDeck
     const totalDeckIds = new Set(this.totalDeck.map(c => c.id));
     this.hand = this.hand.filter(c => totalDeckIds.has(c.id));
-
-    // Ensure selectedForDiscard only has cards that are actually in hand
     const handIds = new Set(this.hand.map(c => c.id));
     for (const id of this.selectedForDiscard) {
       if (!handIds.has(id)) {
@@ -146,30 +167,16 @@ export class AppState {
 
   // --- State Mutators ---
 
-  /**
-   * Resets the entire state to standard 52-card deck and empty hand.
-   */
   resetToStandard() {
     this.totalDeck = createStandardDeck();
     this.hand = [];
     this.selectedForDiscard.clear();
-    this.targetHandType = 'Flush';
+    this.enabledHands = new Set(['Flush', 'Straight', 'Full House', 'Four of a Kind', 'Two Pair']);
     this.autoDetectTargets = true;
-    this.targetParams = {
-      targetSuit: 'Spades',
-      targetRank: 'Ace',
-      rankA: 'Ace',
-      rankB: 'King',
-      rankLower: '4',
-      rankUpper: '9',
-      rankInside: '7'
-    };
+    this.targetParams = this.getDefaultParams();
     this.notify();
   }
 
-  /**
-   * Clears the entire deck and hand.
-   */
   clearDeck() {
     this.totalDeck = [];
     this.hand = [];
@@ -177,9 +184,6 @@ export class AppState {
     this.notify();
   }
 
-  /**
-   * Sets all totalDeck cards to conform to v0 schemas.
-   */
   incrementDeckCard(rank, suit) {
     const card = createCard(rank, suit);
     this.totalDeck.push(card);
@@ -187,38 +191,29 @@ export class AppState {
   }
 
   decrementDeckCard(rank, suit) {
-    // Find a card of this rank and suit that is NOT currently in hand.
-    // If all matching cards are in hand, we must remove it from the hand first, then from deck.
     const handIds = new Set(this.hand.map(c => c.id));
     const deckIdx = this.totalDeck.findIndex(c => c.base_rank === rank && c.base_suit === suit && !handIds.has(c.id));
     
     if (deckIdx !== -1) {
       this.totalDeck.splice(deckIdx, 1);
     } else {
-      // If we can't find one that is NOT in hand, see if we can find one that IS in hand.
       const anyIdx = this.totalDeck.findIndex(c => c.base_rank === rank && c.base_suit === suit);
       if (anyIdx !== -1) {
         const cardToRemove = this.totalDeck[anyIdx];
         this.totalDeck.splice(anyIdx, 1);
         this.removeCardFromHand(cardToRemove.id);
-        return; // removeCardFromHand already calls notify
+        return;
       }
     }
     this.notify();
   }
 
-  /**
-   * Draws a card of rank/suit into hand dock.
-   */
   addCardToHand(rank, suit) {
     if (this.hand.length >= 8) return;
-
-    // Check if there is an available card of this rank/suit in totalDeck that is not in hand.
     const handIds = new Set(this.hand.map(c => c.id));
     let availableCard = this.totalDeck.find(c => c.base_rank === rank && c.base_suit === suit && !handIds.has(c.id));
 
     if (!availableCard) {
-      // If none are available in the deck, automatically add one to the totalDeck.
       availableCard = createCard(rank, suit);
       this.totalDeck.push(availableCard);
     }
@@ -242,8 +237,12 @@ export class AppState {
     this.notify();
   }
 
-  setTargetHandType(type) {
-    this.targetHandType = type;
+  toggleHandEnabled(handType) {
+    if (this.enabledHands.has(handType)) {
+      this.enabledHands.delete(handType);
+    } else {
+      this.enabledHands.add(handType);
+    }
     this.notify();
   }
 
@@ -269,27 +268,17 @@ export class AppState {
   }
 
   /**
-   * Performs automatic detection of target ranks and suits based on the kept hand.
+   * Performs automatic detection of target ranks and suits for all 12 hand types based on kept cards.
    */
   detectTargets() {
     const kept = this.keptHand;
-
-    // Default fallback params
-    const detected = {
-      targetSuit: 'Spades',
-      targetRank: 'Ace',
-      rankA: 'Ace',
-      rankB: 'King',
-      rankLower: '4',
-      rankUpper: '9',
-      rankInside: '7'
-    };
+    const detected = this.getDefaultParams();
 
     if (kept.length === 0) {
       return detected;
     }
 
-    // 1. Flush (Target Suit)
+    // 1. Suit counts (Flush, Flush House, Flush Five, Royal Flush)
     const suitCounts = {};
     for (const card of kept) {
       suitCounts[card.base_suit] = (suitCounts[card.base_suit] || 0) + 1;
@@ -302,9 +291,29 @@ export class AppState {
         maxSuit = suit;
       }
     }
-    detected.targetSuit = maxSuit;
+    detected.flush_suit = maxSuit;
+    detected.flushhouse_suit = maxSuit;
+    detected.flushfive_suit = maxSuit;
+    
+    // For Royal Flush, count suit matching high cards (10, J, Q, K, A)
+    const highRanksSet = new Set(['10', 'Jack', 'Queen', 'King', 'Ace']);
+    const royalSuitCounts = {};
+    for (const card of kept) {
+      if (highRanksSet.has(card.base_rank)) {
+        royalSuitCounts[card.base_suit] = (royalSuitCounts[card.base_suit] || 0) + 1;
+      }
+    }
+    let maxRoyalSuit = 'Spades';
+    let maxRoyalSuitCount = -1;
+    for (const suit of SUITS) {
+      if ((royalSuitCounts[suit] || 0) > maxRoyalSuitCount) {
+        maxRoyalSuitCount = royalSuitCounts[suit];
+        maxRoyalSuit = suit;
+      }
+    }
+    detected.royal_suit = maxRoyalSuit;
 
-    // 2. Four of a Kind (Target Rank)
+    // 2. Rank counts (Pair, Three, Four, Five of a Kind)
     const rankCounts = {};
     for (const card of kept) {
       rankCounts[card.base_rank] = (rankCounts[card.base_rank] || 0) + 1;
@@ -317,113 +326,68 @@ export class AppState {
         maxRank = rank;
       }
     }
-    detected.targetRank = maxRank;
+    detected.pair_rank = maxRank;
+    detected.three_rank = maxRank;
+    detected.four_rank = maxRank;
+    detected.five_rank = maxRank;
 
-    // 3. Full House (Rank A - 3 of, Rank B - 2 of)
+    // 3. Dual rank counts (Two Pair, Full House, Flush House)
     const sortedRanksByCount = Object.entries(rankCounts)
       .sort((a, b) => b[1] - a[1]); // Sort by count descending
 
     if (sortedRanksByCount.length >= 1) {
-      detected.rankA = sortedRanksByCount[0][0];
+      detected.twopair_rankA = sortedRanksByCount[0][0];
+      detected.fh_rankA = sortedRanksByCount[0][0];
     }
     if (sortedRanksByCount.length >= 2) {
-      detected.rankB = sortedRanksByCount[1][0];
+      detected.twopair_rankB = sortedRanksByCount[1][0];
+      detected.fh_rankB = sortedRanksByCount[1][0];
     } else {
-      // If we only have 1 rank, choose a different rank for B
-      detected.rankB = detected.rankA === 'Ace' ? 'King' : 'Ace';
+      detected.twopair_rankB = detected.twopair_rankA === 'Ace' ? 'King' : 'Ace';
+      detected.fh_rankB = detected.fh_rankA === 'Ace' ? 'King' : 'Ace';
     }
 
-    // 4. Straight Calculations (Outside & Inside)
-    // Map kept unique ranks to values
+    // Among the cards matching the target suit, find ranks
+    const suitCards = kept.filter(c => c.base_suit === maxSuit);
+    const suitRankCounts = {};
+    for (const card of suitCards) {
+      suitRankCounts[card.base_rank] = (suitRankCounts[card.base_rank] || 0) + 1;
+    }
+    const sortedSuitRanks = Object.entries(suitRankCounts)
+      .sort((a, b) => b[1] - a[1]);
+
+    if (sortedSuitRanks.length >= 1) {
+      detected.flushhouse_rankA = sortedSuitRanks[0][0];
+      detected.flushfive_rank = sortedSuitRanks[0][0];
+    }
+    if (sortedSuitRanks.length >= 2) {
+      detected.flushhouse_rankB = sortedSuitRanks[1][0];
+    } else {
+      detected.flushhouse_rankB = detected.flushhouse_rankA === 'Ace' ? 'King' : 'Ace';
+    }
+
+    // 4. Straight search (Straight, Straight Flush)
     const uniqueVals = Array.from(new Set(kept.map(c => RANK_TO_VAL[c.base_rank]))).sort((a, b) => a - b);
-    
-    // Check if Ace can be low
     if (uniqueVals.includes(14)) {
-      uniqueVals.unshift(1); // Add value 1 (Low Ace) at the beginning
+      uniqueVals.unshift(1); // Low Ace
     }
 
-    let detectedOutside = false;
-    let detectedInside = false;
+    let bestRange = '10-J-Q-K-A';
+    let bestCount = -1;
 
-    // Helper to check if 4 values form an Outside Straight draw (sequential span of 4, both ends open in range [1, 14])
-    // Loop through uniqueVals to find 4 consecutive elements
-    for (let i = 0; i <= uniqueVals.length - 4; i++) {
-      const v1 = uniqueVals[i];
-      const v2 = uniqueVals[i+1];
-      const v3 = uniqueVals[i+2];
-      const v4 = uniqueVals[i+3];
-
-      if (v2 === v1 + 1 && v3 === v1 + 2 && v4 === v1 + 3) {
-        // We have 4 sequential elements!
-        const lowerVal = v1 - 1;
-        const upperVal = v4 + 1;
-
-        if (lowerVal >= 1 && upperVal <= 14) {
-          detected.rankLower = VAL_TO_RANK[lowerVal];
-          detected.rankUpper = VAL_TO_RANK[upperVal];
-          detectedOutside = true;
-          break;
-        }
+    for (const range of STRAIGHT_RANGES) {
+      const rangeSet = new Set(range.vals);
+      const count = uniqueVals.filter(v => rangeSet.has(v)).length;
+      if (count > bestCount) {
+        bestCount = count;
+        bestRange = range.label;
       }
     }
-
-    // If outside not detected, default to standard J-Q-K-A outs or similar
-    if (!detectedOutside) {
-      // Try to find any sequential block of size 3 or 4, or just default.
-      detected.rankLower = '4';
-      detected.rankUpper = '9';
-    }
-
-    // Inside Straight: check for 4 values spanning a range of 5 with 1 missing interior element
-    // Or a one-ended straight (e.g. 1-2-3-4 needing 5, or 11-12-13-14 needing 10)
-    for (let i = 0; i <= uniqueVals.length - 4; i++) {
-      // Check all subsets of size 4
-      const subset = uniqueVals.slice(i, i + 4);
-      const min = subset[0];
-      const max = subset[3];
-
-      if (max - min === 4) {
-        // Check which element is missing in the range [min, max]
-        const valsSet = new Set(subset);
-        for (let v = min + 1; v < max; v++) {
-          if (!valsSet.has(v)) {
-            detected.rankInside = VAL_TO_RANK[v];
-            detectedInside = true;
-            break;
-          }
-        }
-      }
-      if (detectedInside) break;
-    }
-
-    // Check one-ended cases specifically:
-    // A-2-3-4 (1, 2, 3, 4) needs 5
-    if (!detectedInside) {
-      const lowAceStr = new Set([1, 2, 3, 4]);
-      if (uniqueVals.filter(v => lowAceStr.has(v)).length === 4) {
-        detected.rankInside = '5';
-        detectedInside = true;
-      }
-    }
-    // J-Q-K-A (11, 12, 13, 14) needs 10
-    if (!detectedInside) {
-      const highStr = new Set([11, 12, 13, 14]);
-      if (uniqueVals.filter(v => highStr.has(v)).length === 4) {
-        detected.rankInside = '10';
-        detectedInside = true;
-      }
-    }
-
-    if (!detectedInside) {
-      detected.rankInside = '7';
-    }
+    detected.straight_range = bestRange;
 
     return detected;
   }
 
-  /**
-   * Retrieves the active targets (either detected or overridden)
-   */
   get activeTargets() {
     if (this.autoDetectTargets) {
       return this.detectTargets();

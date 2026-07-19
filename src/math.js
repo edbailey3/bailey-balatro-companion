@@ -1,5 +1,5 @@
 /**
- * Hypergeometric Draw Engine for Balatro Tactical Companion
+ * Hypergeometric Draw Engine for Balatro Tactical Companion (v1)
  */
 
 /**
@@ -23,100 +23,106 @@ export function nCr(n, r) {
 }
 
 /**
- * Computes individual Hypergeometric Probability P(X = k)
+ * Generalized Multivariate Hypergeometric Cumulative Probability Solver.
+ * Evaluates the probability that for all targets, we draw at least t.k cards
+ * of category i (which has t.K available items in the remaining deck)
+ * when drawing a sample of size n from a deck of size N.
  * 
- * @param {number} k Target successes drawn
  * @param {number} N Total remaining deck size
- * @param {number} K Total matching targets in deck
  * @param {number} n Discard draw sample size
- * @returns {number} Probability value between 0 and 1
+ * @param {Array<{K: number, k: number}>} targets List of target configurations
+ * @returns {number} Joint probability between 0 and 1
+ */
+export function calculateMultivariateHypergeometric(N, n, targets) {
+  // Filter out targets that don't need any cards (k <= 0)
+  const activeTargets = targets.filter(t => t.k > 0);
+  
+  // If we don't need any successes, the probability of meeting the target is 100%
+  if (activeTargets.length === 0) {
+    return 1.0;
+  }
+
+  // Boundary Exception Guards
+  const totalK = activeTargets.reduce((sum, t) => sum + t.K, 0);
+  const totalNeeded = activeTargets.reduce((sum, t) => sum + t.k, 0);
+  
+  if (totalNeeded > n || totalK > N || n > N) {
+    return 0.0;
+  }
+
+  for (const t of activeTargets) {
+    if (t.k > t.K) {
+      return 0.0;
+    }
+  }
+
+  const den = nCr(N, n);
+  if (den === 0) return 0.0;
+
+  let successfulWays = 0;
+
+  // Recursive search to find all combinations of draws (x_1, x_2, ..., x_m)
+  // such that x_i >= k_i and sum(x_i) <= n
+  function search(targetIndex, currentSum, currentCombos) {
+    if (targetIndex === activeTargets.length) {
+      const remainingDraw = n - currentSum;
+      const remainingDeck = N - totalK;
+      if (remainingDraw >= 0 && remainingDraw <= remainingDeck) {
+        const ways = currentCombos * nCr(remainingDeck, remainingDraw);
+        successfulWays += ways;
+      }
+      return;
+    }
+
+    const target = activeTargets[targetIndex];
+    // We can draw between target.k and min(target.K, n - currentSum) cards of this category
+    const maxDraw = Math.min(target.K, n - currentSum);
+    for (let x = target.k; x <= maxDraw; x++) {
+      search(
+        targetIndex + 1,
+        currentSum + x,
+        currentCombos * nCr(target.K, x)
+      );
+    }
+  }
+
+  search(0, 0, 1);
+  return Math.max(0, Math.min(1, successfulWays / den));
+}
+
+/**
+ * Computes individual Hypergeometric Probability P(X = k)
  */
 export function hypergeometricPdf(k, N, K, n) {
-  // Boundary exceptions
   if (k > n || k > K || n > N || k < 0 || n < 0 || K < 0 || N < 0) {
     return 0;
   }
-
   const num = nCr(K, k) * nCr(N - K, n - k);
   const den = nCr(N, n);
-
   if (den === 0) return 0;
   return num / den;
 }
 
 /**
- * Computes Cumulative Hypergeometric Probability P(X >= k)
- * 
- * @param {number} k Minimum successes needed
- * @param {number} N Total remaining deck size
- * @param {number} K Total matching targets in deck
- * @param {number} n Discard draw sample size
- * @returns {number} Cumulative probability value between 0 and 1
+ * Computes Cumulative Hypergeometric Probability P(X >= k) - wrapper using general solver
  */
 export function hypergeometricCdf(k, N, K, n) {
-  // Boundary Exception Guard Rules:
-  // "If k > n, k > K, or n > N, the evaluation framework must catch the out-of-bounds error early and return a deterministic 0.00% success indicator"
+  // Boundary Exception Guard Rules
   if (k > n || k > K || n > N) {
     return 0;
   }
-
-  // If we need 0 or fewer successes, probability of meeting the target is 100%
   if (k <= 0) {
     return 1;
   }
-
-  let sum = 0;
-  const maxSuccesses = Math.min(n, K);
-  for (let i = k; i <= maxSuccesses; i++) {
-    sum += hypergeometricPdf(i, N, K, n);
-  }
-
-  // Ensure precision boundaries [0, 1]
-  return Math.max(0, Math.min(1, sum));
+  return calculateMultivariateHypergeometric(N, n, [{ K: K, k: k }]);
 }
 
 /**
- * Evaluates dual-target joint probability for Full House (3 of Rank A, 2 of Rank B)
- * Using Multivariate Hypergeometric Distribution.
- * 
- * @param {number} kA Needed cards of Rank A
- * @param {number} kB Needed cards of Rank B
- * @param {number} N Total remaining deck size
- * @param {number} KA Total Rank A cards in remaining deck
- * @param {number} KB Total Rank B cards in remaining deck
- * @param {number} n Discard draw sample size
- * @returns {number} Cumulative joint probability between 0 and 1
+ * Evaluates dual-target joint probability for Full House - wrapper using general solver
  */
 export function multivariateHypergeometricCdf(kA, kB, N, KA, KB, n) {
-  // Boundary Exception Guard Rules
-  if (kA + kB > n || kA > KA || kB > KB || n > N) {
-    return 0;
-  }
-
-  // If both targets are already met
-  if (kA <= 0 && kB <= 0) {
-    return 1;
-  }
-
-  const den = nCr(N, n);
-  if (den === 0) return 0;
-
-  let sum = 0;
-
-  // We iterate over all possible draw amounts of Rank A (xA) and Rank B (xB)
-  // that satisfy:
-  // xA >= kA, xB >= kB, and xA + xB <= n
-  for (let xA = Math.max(0, kA); xA <= Math.min(n, KA); xA++) {
-    for (let xB = Math.max(0, kB); xB <= Math.min(n - xA, KB); xB++) {
-      const remainingDraw = n - xA - xB;
-      const remainingDeck = N - KA - KB;
-
-      if (remainingDraw >= 0 && remainingDraw <= remainingDeck) {
-        const num = nCr(KA, xA) * nCr(KB, xB) * nCr(remainingDeck, remainingDraw);
-        sum += num / den;
-      }
-    }
-  }
-
-  return Math.max(0, Math.min(1, sum));
+  return calculateMultivariateHypergeometric(N, n, [
+    { K: KA, k: kA },
+    { K: KB, k: kB }
+  ]);
 }

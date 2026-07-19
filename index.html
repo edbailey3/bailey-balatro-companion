@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Balatro Tactical Companion - v0 Hypergeometric Draw Engine</title>
+  <title>Balatro Tactical Companion - v1 Parallel Chasing Matrix</title>
   <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
   <header>
     <h1>Balatro Tactical Companion</h1>
-    <p class="subtitle">v0 Real-Time Hypergeometric Draw Engine</p>
+    <p class="subtitle">v1 Parallel Hypergeometric Draw Engine</p>
   </header>
 
   <main class="app-container">
@@ -44,78 +44,38 @@
       </div>
     </section>
 
-    <!-- RIGHT PANEL: COMPUTATION PANEL -->
+    <!-- RIGHT PANEL: COMPUTATION PANEL (CHASING MATRIX) -->
     <section class="panel">
-      <h2 class="panel-title comp-title">Outs Analysis & Calculations</h2>
+      <h2 class="panel-title comp-title">Outs Analysis & Chasing Matrix</h2>
 
-      <!-- Target Hand Selection Menu -->
-      <div class="target-menu">
-        <p class="target-menu-label">Target Hand Type</p>
-        <div class="target-grid">
-          <button class="target-toggle active" data-hand="Flush">Flush</button>
-          <button class="target-toggle" data-hand="Four of a Kind">Four of a Kind</button>
-          <button class="target-toggle" data-hand="Full House">Full House</button>
-          <button class="target-toggle" data-hand="Straight (Outside)">Straight (Outside)</button>
-          <button class="target-toggle" data-hand="Straight (Inside)">Straight (Inside)</button>
+      <!-- Target Options Header -->
+      <div class="config-toggle-header">
+        <span class="switch-label">Target Auto-Detection</span>
+        <button id="auto-detect-toggle" class="switch-btn active">ON</button>
+      </div>
+
+      <!-- Chasing Matrix stack of 12 parallel hand types -->
+      <div class="matrix-container">
+        <p class="target-menu-label">Parallel Draw Probabilities (P(X &ge; k))</p>
+        <div id="chasing-matrix" class="chasing-matrix">
+          <!-- Dynamically populated via JS -->
         </div>
       </div>
 
-      <!-- Target Parameters Config Inputs -->
-      <div class="target-configs-box">
-        <div class="config-toggle-row">
-          <span class="switch-label">Target Auto-Detection</span>
-          <button id="auto-detect-toggle" class="switch-btn active">ON</button>
-        </div>
-
-        <div id="configs-controls" class="target-menu">
-          <!-- Dynamically generated controls based on active target hand type -->
-        </div>
-      </div>
-
-      <!-- Primary Odds Radial Gauge -->
-      <div class="odds-gauge-container">
-        <div class="gauge-svg-wrapper">
-          <svg class="gauge-svg" viewBox="0 0 200 200">
-            <defs>
-              <linearGradient id="gauge-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="var(--neon-blue)" />
-                <stop offset="100%" stop-color="var(--neon-purple)" />
-              </linearGradient>
-            </defs>
-            <circle class="gauge-bg-ring" cx="100" cy="100" r="90" />
-            <circle id="gauge-progress" class="gauge-progress-ring" cx="100" cy="100" r="90" />
-          </svg>
-          <div class="gauge-text-box">
-            <span id="odds-percentage" class="gauge-percentage">0.00%</span>
-            <span id="odds-label" class="gauge-label">Success Rate</span>
+      <!-- Global Telemetry & Status bar -->
+      <div class="global-telemetry-bar">
+        <div class="global-telemetry-stats">
+          <div class="global-telemetry-stat">
+            <label>N:</label>
+            <span id="global-telemetry-N">0</span>
+          </div>
+          <div class="global-telemetry-stat">
+            <label>n:</label>
+            <span id="global-telemetry-n">0</span>
           </div>
         </div>
-      </div>
-
-      <!-- Telemetry Feed Dashboard -->
-      <div class="telemetry-feed">
-        <p class="target-menu-label">Telemetry Feed (Calculated States)</p>
-        <div class="telemetry-grid">
-          <div class="telemetry-card">
-            <span id="telemetry-N" class="telemetry-value">0</span>
-            <span class="telemetry-label">Deck (N)</span>
-          </div>
-          <div class="telemetry-card">
-            <span id="telemetry-K" class="telemetry-value">0</span>
-            <span class="telemetry-label">Outs (K)</span>
-          </div>
-          <div class="telemetry-card">
-            <span id="telemetry-n" class="telemetry-value">0</span>
-            <span class="telemetry-label">Draw (n)</span>
-          </div>
-          <div class="telemetry-card">
-            <span id="telemetry-k" class="telemetry-value">0</span>
-            <span class="telemetry-label">Need (k)</span>
-          </div>
-        </div>
-
-        <div class="telemetry-status-box">
-          <span class="status-label">Engine Status:</span>
+        <div class="global-status">
+          <span class="status-label">Engine:</span>
           <span id="engine-status-text" class="status-text">CALCULATING</span>
         </div>
       </div>
