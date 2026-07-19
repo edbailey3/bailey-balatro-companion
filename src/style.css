@@ -61,6 +61,7 @@ h1 {
   letter-spacing: 2px;
   background: linear-gradient(135deg, var(--neon-red) 30%, var(--neon-blue) 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   text-shadow: 0 0 30px rgba(255, 62, 62, 0.3);
 }
