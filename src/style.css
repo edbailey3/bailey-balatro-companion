@@ -869,3 +869,173 @@ h1 {
   color: var(--text-secondary);
   box-shadow: none;
 }
+
+/* --- Practice Mode UI Styles --- */
+
+.mode-toggle-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin: 1rem auto 0 auto;
+  background: rgba(22, 26, 37, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.5rem 1.25rem;
+  border-radius: 50px;
+  width: max-content;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.4);
+}
+
+.mode-label {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+  transition: all 0.3s ease;
+}
+
+.mode-label.active {
+  color: var(--text-primary);
+}
+
+#mode-live-label.active {
+  color: var(--neon-red);
+  text-shadow: 0 0 10px rgba(255, 62, 62, 0.4);
+}
+
+#mode-practice-label.active {
+  color: var(--neon-blue);
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+}
+
+/* Toggle Switch slider */
+.mode-switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 26px;
+}
+
+.mode-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.mode-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #1e2230;
+  transition: .4s;
+  border-radius: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.mode-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: var(--neon-red);
+  transition: .4s;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(255, 62, 62, 0.6);
+}
+
+input:checked + .mode-slider:before {
+  transform: translateX(24px);
+  background-color: var(--neon-blue);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
+}
+
+/* Hand Dock Overlay & Deal Initial Button */
+.hand-dock-container {
+  position: relative;
+}
+
+.hand-dock-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: 36px; /* Offset for dock header */
+  background: rgba(10, 11, 14, 0.7);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  z-index: 10;
+  border: 1px dashed rgba(0, 229, 255, 0.2);
+}
+
+.action-btn.deal-initial-btn {
+  background: var(--neon-blue);
+  color: #000;
+  border: 1px solid var(--neon-blue);
+  font-weight: 850;
+  font-size: 1.05rem;
+  padding: 0.9rem 2.2rem;
+  border-radius: 10px;
+  box-shadow: 0 0 22px rgba(0, 229, 255, 0.45);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  width: auto;
+  flex-grow: 0;
+  text-shadow: none;
+}
+
+.action-btn.deal-initial-btn:hover {
+  background: #55f3ff;
+  border-color: #55f3ff;
+  box-shadow: 0 0 35px rgba(0, 229, 255, 0.8);
+  transform: scale(1.05);
+}
+
+/* Warning banner for depleted/locked dock */
+.dock-lock-warning {
+  background: rgba(255, 62, 62, 0.12);
+  border: 1px solid rgba(255, 62, 62, 0.5);
+  color: var(--neon-red);
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: center;
+  padding: 0.6rem;
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+  box-shadow: 0 0 12px rgba(255, 62, 62, 0.2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  animation: pulse-border 2s infinite ease-in-out;
+}
+
+@keyframes pulse-border {
+  0%, 100% { border-color: rgba(255, 62, 62, 0.4); }
+  50% { border-color: var(--neon-red); }
+}
+
+/* Read-Only Grid Overrides for Practice Mode */
+.matrix-grid.read-only .matrix-cell {
+  cursor: default;
+}
+
+.matrix-grid.read-only .matrix-cell:hover {
+  transform: none;
+  border-color: rgba(255, 255, 255, 0.05);
+  box-shadow: none;
+}
+
+.matrix-grid.read-only .matrix-cell-adjusters {
+  display: none !important;
+}
+

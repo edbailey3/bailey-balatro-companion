@@ -110,6 +110,8 @@ export class AppState {
         
         this.targetParams = parsed.targetParams || this.getDefaultParams();
         this.autoDetectTargets = parsed.autoDetectTargets !== undefined ? parsed.autoDetectTargets : true;
+        this.app_mode = parsed.app_mode || 'live';
+        this.dock_locked = parsed.dock_locked !== undefined ? parsed.dock_locked : false;
         this.validateState();
         return;
       }
@@ -129,6 +131,8 @@ export class AppState {
     this.enabledHands = new Set(['Flush', 'Straight', 'Full House', 'Four of a Kind', 'Two Pair']);
     this.targetParams = this.getDefaultParams();
     this.autoDetectTargets = true;
+    this.app_mode = 'live';
+    this.dock_locked = false;
   }
 
   saveState() {
@@ -144,7 +148,9 @@ export class AppState {
         hand_size_locked: this.hand_size_locked,
         enabledHands: Array.from(this.enabledHands),
         targetParams: this.targetParams,
-        autoDetectTargets: this.autoDetectTargets
+        autoDetectTargets: this.autoDetectTargets,
+        app_mode: this.app_mode,
+        dock_locked: this.dock_locked
       };
       localStorage.setItem('balatro_companion_state_v1.2', JSON.stringify(stateObj));
     } catch (e) {
@@ -204,6 +210,7 @@ export class AppState {
     this.selectedForDiscard.clear();
     this.graveyard_pool = [];
     this.played_pool = [];
+    this.dock_locked = false;
     this.enabledHands = new Set(['Flush', 'Straight', 'Full House', 'Four of a Kind', 'Two Pair']);
     this.autoDetectTargets = true;
     this.targetParams = this.getDefaultParams();
@@ -220,6 +227,7 @@ export class AppState {
     this.selectedForDiscard.clear();
     this.graveyard_pool = [];
     this.played_pool = [];
+    this.dock_locked = false;
     this.notify();
   }
 
@@ -232,7 +240,70 @@ export class AppState {
     this.selectedForDiscard.clear();
     this.graveyard_pool = [];
     this.played_pool = [];
+    this.dock_locked = false;
     this.notify();
+  }
+
+  setAppMode(mode) {
+    if (mode !== 'live' && mode !== 'practice') return;
+    this.app_mode = mode;
+    this.hand = Array(this.max_hand_size).fill(null);
+    this.selectedForDiscard.clear();
+    this.graveyard_pool = [];
+    this.played_pool = [];
+    this.remainingDeck = this.copyDeck(this.baselineDeck);
+    this.dock_locked = false;
+    this.notify();
+  }
+
+  drawRandomCards(count) {
+    if (this.remainingDeck.length === 0) return [];
+    const drawn = [];
+    const drawCount = Math.min(count, this.remainingDeck.length);
+    for (let i = 0; i < drawCount; i++) {
+      const randomIndex = Math.floor(Math.random() * this.remainingDeck.length);
+      const card = this.remainingDeck.splice(randomIndex, 1)[0];
+      drawn.push(card);
+    }
+    return drawn;
+  }
+
+  dealInitialHand() {
+    if (this.app_mode !== 'practice') return;
+    this.hand = Array(this.max_hand_size).fill(null);
+    this.selectedForDiscard.clear();
+    this.dock_locked = false;
+    
+    const drawn = this.drawRandomCards(this.max_hand_size);
+    for (let i = 0; i < drawn.length; i++) {
+      this.hand[i] = drawn[i];
+    }
+    this.notify();
+  }
+
+  refillHandRandomly() {
+    const emptySlotsIndices = [];
+    for (let i = 0; i < this.max_hand_size; i++) {
+      if (this.hand[i] === null) {
+        emptySlotsIndices.push(i);
+      }
+    }
+    
+    const needed = emptySlotsIndices.length;
+    if (needed === 0) return;
+    
+    const available = this.remainingDeck.length;
+    if (available < needed) {
+      this.dock_locked = true;
+    }
+    
+    const toDraw = Math.min(needed, available);
+    const drawn = this.drawRandomCards(toDraw);
+    
+    for (let i = 0; i < drawn.length; i++) {
+      const slotIdx = emptySlotsIndices[i];
+      this.hand[slotIdx] = drawn[i];
+    }
   }
 
   executeDiscard() {
@@ -246,6 +317,11 @@ export class AppState {
       }
     }
     this.selectedForDiscard.clear();
+    
+    if (this.app_mode === 'practice') {
+      this.refillHandRandomly();
+    }
+    
     this.notify();
   }
 
@@ -260,6 +336,11 @@ export class AppState {
       }
     }
     this.selectedForDiscard.clear();
+    
+    if (this.app_mode === 'practice') {
+      this.refillHandRandomly();
+    }
+    
     this.notify();
   }
 
@@ -310,6 +391,7 @@ export class AppState {
    * Refill slot - STRICT remainingDeck check, no auto-increment of baseline here.
    */
   addCardToHand(rank, suit) {
+    if (this.app_mode === 'practice') return; // Guard for practice mode
     const emptyIdx = this.hand.findIndex(c => c === null);
     if (emptyIdx === -1) return; // Hand is full
 
@@ -325,6 +407,7 @@ export class AppState {
   }
 
   removeCardFromHand(cardId) {
+    if (this.app_mode === 'practice') return; // Guard for practice mode
     const idx = this.hand.findIndex(c => c && c.id === cardId);
     if (idx !== -1) {
       const card = this.hand[idx];
@@ -367,6 +450,7 @@ export class AppState {
   }
 
   toggleDiscardSelection(cardId) {
+    if (this.dock_locked) return; // Guard for locked dock
     if (this.selectedForDiscard.has(cardId)) {
       this.selectedForDiscard.delete(cardId);
     } else {

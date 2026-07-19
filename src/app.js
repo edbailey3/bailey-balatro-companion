@@ -31,12 +31,23 @@ const globalTelemetryNEl = document.getElementById('global-telemetry-N');
 const globalTelemetrynEl = document.getElementById('global-telemetry-n');
 const engineStatusEl = document.getElementById('engine-status-text');
 
+// Practice Mode DOM References
+const modeToggleCheckbox = document.getElementById('mode-toggle-checkbox');
+const modeLiveLabel = document.getElementById('mode-live-label');
+const modePracticeLabel = document.getElementById('mode-practice-label');
+const dockLockWarning = document.getElementById('dock-lock-warning');
+
 // Setup Action Listeners
 resetBtn.addEventListener('click', () => state.resetToStandard());
 clearBtn.addEventListener('click', () => state.clearDeck());
 resetRoundBtn.addEventListener('click', () => state.resetRound());
 executeDiscardBtn.addEventListener('click', () => state.executeDiscard());
 executePlayBtn.addEventListener('click', () => state.executePlayHand());
+
+modeToggleCheckbox.addEventListener('change', (e) => {
+  const mode = e.target.checked ? 'practice' : 'live';
+  state.setAppMode(mode);
+});
 
 handSizeDecBtn.addEventListener('click', () => {
   state.setMaxHandSize(state.max_hand_size - 1);
@@ -65,6 +76,12 @@ autoDetectToggle.addEventListener('click', () => {
 function renderDeckMatrix() {
   matrixGridEl.innerHTML = '';
   
+  if (state.app_mode === 'practice') {
+    matrixGridEl.classList.add('read-only');
+  } else {
+    matrixGridEl.classList.remove('read-only');
+  }
+
   // Count remaining deck instances
   const countsMap = {};
   for (const card of state.remainingDeck) {
@@ -153,6 +170,7 @@ function renderDeckMatrix() {
       cell.appendChild(adjusters);
 
       cell.addEventListener('click', () => {
+        if (state.app_mode === 'practice') return;
         if (count > 0) {
           state.addCardToHand(rank, suit);
         }
@@ -199,18 +217,20 @@ function renderHandDock() {
       discardTag.className = 'hand-card-discard-tag';
       discardTag.textContent = 'SELECTED';
 
-      const removeBtn = document.createElement('button');
-      removeBtn.className = 'hand-card-remove-btn';
-      removeBtn.textContent = '×';
-      removeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        state.removeCardFromHand(card.id);
-      });
-
       cardEl.appendChild(rankSpan);
       cardEl.appendChild(suitSpan);
       cardEl.appendChild(discardTag);
-      cardEl.appendChild(removeBtn);
+
+      if (state.app_mode !== 'practice') {
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'hand-card-remove-btn';
+        removeBtn.textContent = '×';
+        removeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          state.removeCardFromHand(card.id);
+        });
+        cardEl.appendChild(removeBtn);
+      }
 
       cardEl.addEventListener('click', () => {
         state.toggleDiscardSelection(card.id);
@@ -226,14 +246,38 @@ function renderHandDock() {
     handDockEl.appendChild(slot);
   }
 
+  // Render Deal Initial Hand button if in Practice Mode and empty
+  const isEmpty = state.hand.every(c => c === null);
+  if (isEmpty && state.app_mode === 'practice') {
+    const overlay = document.createElement('div');
+    overlay.className = 'hand-dock-overlay';
+    
+    const dealBtn = document.createElement('button');
+    dealBtn.className = 'action-btn deal-initial-btn';
+    dealBtn.innerHTML = '<span>🎲</span> Deal Initial Hand';
+    dealBtn.addEventListener('click', () => {
+      state.dealInitialHand();
+    });
+    
+    overlay.appendChild(dealBtn);
+    handDockEl.appendChild(overlay);
+  }
+
+  // Toggle lock warning display
+  if (state.app_mode === 'practice' && state.dock_locked) {
+    dockLockWarning.style.display = 'block';
+  } else {
+    dockLockWarning.style.display = 'none';
+  }
+
   // Update Hand Size Controls UI state
   handSizeValDisplay.textContent = state.max_hand_size;
   handSizeLockChk.checked = state.hand_size_locked;
-  handSizeDecBtn.disabled = (state.max_hand_size <= 1);
-  handSizeIncBtn.disabled = (state.max_hand_size >= 12);
+  handSizeDecBtn.disabled = (state.max_hand_size <= 1 || state.dock_locked);
+  handSizeIncBtn.disabled = (state.max_hand_size >= 12 || state.dock_locked);
 
   // Update Action Buttons enable/disable state
-  const hasSelection = state.selectedForDiscard.size > 0;
+  const hasSelection = state.selectedForDiscard.size > 0 && !state.dock_locked;
   executeDiscardBtn.disabled = !hasSelection;
   executePlayBtn.disabled = !hasSelection;
 }
@@ -702,6 +746,19 @@ function syncHeaderUI() {
   } else {
     autoDetectToggle.classList.remove('active');
     autoDetectToggle.textContent = 'OFF';
+  }
+
+  // Sync mode toggle switch and active labels
+  const isPractice = state.app_mode === 'practice';
+  if (modeToggleCheckbox) {
+    modeToggleCheckbox.checked = isPractice;
+  }
+  if (isPractice) {
+    modePracticeLabel.classList.add('active');
+    modeLiveLabel.classList.remove('active');
+  } else {
+    modePracticeLabel.classList.remove('active');
+    modeLiveLabel.classList.add('active');
   }
 }
 

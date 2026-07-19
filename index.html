@@ -12,6 +12,14 @@
   <header>
     <h1>Balatro Tactical Companion</h1>
     <p class="subtitle">v1 Parallel Hypergeometric Draw Engine</p>
+    <div class="mode-toggle-container">
+      <span class="mode-label active" id="mode-live-label">Live Tracker Mode</span>
+      <label class="mode-switch">
+        <input type="checkbox" id="mode-toggle-checkbox">
+        <span class="mode-slider"></span>
+      </label>
+      <span class="mode-label" id="mode-practice-label">Practice Sandbox Mode</span>
+    </div>
   </header>
 
   <main class="app-container">
@@ -39,6 +47,9 @@
               <input type="checkbox" id="hand-size-lock-chk" /> 🔒 Lock
             </label>
           </div>
+        </div>
+        <div id="dock-lock-warning" class="dock-lock-warning" style="display: none;">
+          <span>🔒</span> Deck Depleted - Dock Locked (Reset Round to restart)
         </div>
         <div id="hand-dock" class="hand-dock">
           <!-- Dynamically populated via JS -->
