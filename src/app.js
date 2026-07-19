@@ -18,15 +18,19 @@ const matrixGridEl = document.getElementById('matrix-grid');
 const handDockEl = document.getElementById('hand-dock');
 const resetBtn = document.getElementById('reset-btn');
 const clearBtn = document.getElementById('clear-btn');
+const resetRoundBtn = document.getElementById('reset-round-btn');
+const executeDiscardBtn = document.getElementById('execute-discard-btn');
 const autoDetectToggle = document.getElementById('auto-detect-toggle');
 const chasingMatrixEl = document.getElementById('chasing-matrix');
 const globalTelemetryNEl = document.getElementById('global-telemetry-N');
 const globalTelemetrynEl = document.getElementById('global-telemetry-n');
 const engineStatusEl = document.getElementById('engine-status-text');
 
-// Setup action buttons
+// Setup Action Listeners
 resetBtn.addEventListener('click', () => state.resetToStandard());
 clearBtn.addEventListener('click', () => state.clearDeck());
+resetRoundBtn.addEventListener('click', () => state.resetRound());
+executeDiscardBtn.addEventListener('click', () => state.executeDiscard());
 
 autoDetectToggle.addEventListener('click', () => {
   const nextValue = !state.autoDetectTargets;
@@ -45,8 +49,9 @@ autoDetectToggle.addEventListener('click', () => {
 function renderDeckMatrix() {
   matrixGridEl.innerHTML = '';
   
+  // Count baseline deck configurations
   const countsMap = {};
-  for (const card of state.totalDeck) {
+  for (const card of state.baselineDeck) {
     const key = `${card.base_rank}_${card.base_suit}`;
     countsMap[key] = (countsMap[key] || 0) + 1;
   }
@@ -139,10 +144,10 @@ function renderHandDock() {
   
   for (let i = 0; i < 8; i++) {
     const slot = document.createElement('div');
-    slot.className = 'hand-slot';
+    const card = state.hand[i];
     
-    if (i < state.hand.length) {
-      const card = state.hand[i];
+    if (card !== null) {
+      slot.className = 'hand-slot';
       const isSelected = state.selectedForDiscard.has(card.id);
 
       const cardEl = document.createElement('div');
@@ -179,18 +184,24 @@ function renderHandDock() {
 
       slot.appendChild(cardEl);
     } else {
-      slot.textContent = 'Empty';
+      // Highlighted empty placeholder awaiting card input
+      slot.className = 'hand-slot awaiting-input';
+      slot.textContent = 'Awaiting Refill';
     }
 
     handDockEl.appendChild(slot);
   }
+
+  // Update Execute Discard Button enable/disable state
+  executeDiscardBtn.disabled = (state.selectedForDiscard.size === 0);
 }
 
-// Render the Chasing Matrix Layout
+// Render Chasing Matrix and execute calculations
 function renderChasingMatrix() {
   chasingMatrixEl.innerHTML = '';
   const targets = state.activeTargets;
   const isAuto = state.autoDetectTargets;
+  const isHandFull = state.isHandFull;
 
   const N = state.remainingDeck.length;
   const n = state.selectedForDiscard.size;
@@ -203,27 +214,26 @@ function renderChasingMatrix() {
     const isEnabled = state.enabledHands.has(handType);
     const row = document.createElement('div');
     
-    // 1. Calculate odds and telemetry stats for this hand type
     let KDisp = '0';
     let kDisp = '0';
     let prob = 0;
 
-    if (isEnabled) {
+    // Calculate probabilities if hand is full and enabled
+    if (isEnabled && isHandFull) {
       const calcResult = calculateHandOdds(handType, targets, N, n, kept, remDeck);
       prob = calcResult.prob;
       KDisp = calcResult.KDisp;
       kDisp = calcResult.kDisp;
     }
 
-    // Set styling class names depending on probability thresholds
     let probClass = 'prob-none';
-    if (isEnabled) {
+    if (isEnabled && isHandFull) {
       if (prob > 0.75) probClass = 'prob-high';
       else if (prob > 0.4) probClass = 'prob-med';
       else if (prob > 0.15) probClass = 'prob-low';
     }
 
-    row.className = `chasing-row ${isEnabled ? 'active' : 'inactive'} ${probClass}`;
+    row.className = `chasing-row ${isEnabled ? 'active' : 'inactive'} ${!isHandFull && isEnabled ? 'awaiting-refill' : ''} ${probClass}`;
 
     // Column 1: Switch checkbox
     const switchDiv = document.createElement('div');
@@ -251,7 +261,7 @@ function renderChasingMatrix() {
     renderRowControls(handType, targets, isAuto, isEnabled, controlsDiv);
     row.appendChild(controlsDiv);
 
-    // Column 4: Progress bar and small stats
+    // Column 4: Progress bar and telemetry info
     const progressWrapper = document.createElement('div');
     progressWrapper.className = 'chasing-progress-wrapper';
 
@@ -260,7 +270,7 @@ function renderChasingMatrix() {
 
     const progressFill = document.createElement('div');
     progressFill.className = 'chasing-progress-fill';
-    if (isEnabled) {
+    if (isEnabled && isHandFull) {
       progressFill.style.width = `${prob * 100}%`;
     }
     progressBg.appendChild(progressFill);
@@ -268,7 +278,11 @@ function renderChasingMatrix() {
     const statsText = document.createElement('span');
     statsText.className = 'chasing-telemetry-text';
     if (isEnabled) {
-      statsText.textContent = `N: ${N} | K: ${KDisp} | n: ${n} | k: ${kDisp}`;
+      if (isHandFull) {
+        statsText.textContent = `N: ${N} | K: ${KDisp} | n: ${n} | k: ${kDisp}`;
+      } else {
+        statsText.textContent = 'Awaiting Refill...';
+      }
     } else {
       statsText.textContent = 'Disabled';
     }
@@ -277,11 +291,15 @@ function renderChasingMatrix() {
     progressWrapper.appendChild(statsText);
     row.appendChild(progressWrapper);
 
-    // Column 5: Odds percentage display
+    // Column 5: Odds percentage
     const oddsSpan = document.createElement('span');
     oddsSpan.className = 'chasing-odds-percentage';
     if (isEnabled) {
-      oddsSpan.textContent = `${(prob * 100).toFixed(2)}%`;
+      if (isHandFull) {
+        oddsSpan.textContent = `${(prob * 100).toFixed(2)}%`;
+      } else {
+        oddsSpan.textContent = 'REFILL';
+      }
     } else {
       oddsSpan.textContent = '—';
     }
@@ -297,11 +315,16 @@ function renderChasingMatrix() {
   globalTelemetryNEl.textContent = N.toString();
   globalTelemetrynEl.textContent = n.toString();
 
-  engineStatusEl.textContent = `READY (${latency.toFixed(2)}ms)`;
-  if (latency > 50) {
-    engineStatusEl.style.color = 'var(--neon-red)';
-  } else {
+  if (isHandFull) {
+    engineStatusEl.textContent = `READY (${latency.toFixed(2)}ms)`;
     engineStatusEl.style.color = 'var(--neon-blue)';
+    if (latency > 50) {
+      console.warn(`Hypergeometric engine exceeded latency: ${latency.toFixed(2)}ms`);
+      engineStatusEl.style.color = 'var(--neon-red)';
+    }
+  } else {
+    engineStatusEl.textContent = 'AWAITING REFILL';
+    engineStatusEl.style.color = 'var(--neon-gold)';
   }
 }
 
@@ -398,7 +421,6 @@ function renderRowControls(handType, targets, isAuto, isEnabled, container) {
       }));
     }
   } else {
-    // High Card, no controls needed
     container.textContent = 'None';
   }
 }
@@ -429,7 +451,6 @@ function createMiniSelect(options, selectedVal, disabled, onChange) {
   return sel;
 }
 
-// Hand probability parser routing to unified multivariate solver
 function calculateHandOdds(handType, targets, N, n, kept, remDeck) {
   let KDisp = '0';
   let kDisp = '0';
@@ -437,7 +458,7 @@ function calculateHandOdds(handType, targets, N, n, kept, remDeck) {
 
   if (handType === 'High Card') {
     const k = kept.length >= 1 ? 0 : 1;
-    const K = N; // Any card satisfies High Card
+    const K = N;
     prob = hypergeometricCdf(k, N, K, n);
     KDisp = K.toString();
     kDisp = k.toString();
@@ -572,7 +593,6 @@ function calculateHandOdds(handType, targets, N, n, kept, remDeck) {
     const rangeObj = STRAIGHT_RANGES.find(r => r.label === rangeLabel);
     const rangeVals = rangeObj ? rangeObj.vals : [10, 11, 12, 13, 14];
 
-    // Build the 5 distinct categories for the multivariate solver
     const targetArr = [];
     const kVals = [];
     const KVals = [];
@@ -580,7 +600,6 @@ function calculateHandOdds(handType, targets, N, n, kept, remDeck) {
     for (const val of rangeVals) {
       const rank = VAL_TO_RANK[val];
       
-      // Kept count of this card
       let hasCard = false;
       if (suit) {
         hasCard = kept.some(c => c.base_rank === rank && c.base_suit === suit);
@@ -590,7 +609,6 @@ function calculateHandOdds(handType, targets, N, n, kept, remDeck) {
 
       const k_c = hasCard ? 0 : 1;
       
-      // Remdeck count
       let K_c = 0;
       if (suit) {
         K_c = remDeck.filter(c => c.base_rank === rank && c.base_suit === suit).length;
@@ -635,7 +653,7 @@ function calculateHandOdds(handType, targets, N, n, kept, remDeck) {
   return { prob, KDisp, kDisp };
 }
 
-// Sync header button highlight
+// Sync Auto-detect ON/OFF button highlight
 function syncHeaderUI() {
   if (state.autoDetectTargets) {
     autoDetectToggle.classList.add('active');
@@ -646,7 +664,7 @@ function syncHeaderUI() {
   }
 }
 
-// Subscribe reactive bind loop
+// State subscription render loop
 state.subscribe((s) => {
   syncHeaderUI();
   renderDeckMatrix();
