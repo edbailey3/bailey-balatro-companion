@@ -1039,3 +1039,44 @@ input:checked + .mode-slider:before {
   display: none !important;
 }
 
+/* --- Hand Sorting Controls Styles --- */
+
+.hand-sort-controls-wrapper {
+  display: flex;
+  gap: 0.5rem;
+  background: rgba(10, 11, 14, 0.4);
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+}
+
+.sort-btn {
+  background: rgba(30, 35, 50, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sort-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.sort-btn.active {
+  background: var(--neon-blue);
+  color: #000;
+  border-color: var(--neon-blue);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+  font-weight: 800;
+}
+
+

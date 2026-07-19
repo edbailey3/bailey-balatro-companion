@@ -5,6 +5,13 @@
 const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King', 'Ace'];
 const SUITS = ['Spades', 'Hearts', 'Diamonds', 'Clubs'];
 
+export const SUIT_ORDER = {
+  'Spades': 0,
+  'Hearts': 1,
+  'Clubs': 2,
+  'Diamonds': 3
+};
+
 export const RANK_TO_VAL = {
   '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10,
   'Jack': 11, 'Queen': 12, 'King': 13, 'Ace': 14
@@ -112,6 +119,7 @@ export class AppState {
         this.autoDetectTargets = parsed.autoDetectTargets !== undefined ? parsed.autoDetectTargets : true;
         this.app_mode = parsed.app_mode || 'live';
         this.dock_locked = parsed.dock_locked !== undefined ? parsed.dock_locked : false;
+        this.active_sort = parsed.active_sort || 'none';
         this.validateState();
         return;
       }
@@ -133,6 +141,7 @@ export class AppState {
     this.autoDetectTargets = true;
     this.app_mode = 'live';
     this.dock_locked = false;
+    this.active_sort = 'none';
   }
 
   saveState() {
@@ -150,7 +159,8 @@ export class AppState {
         targetParams: this.targetParams,
         autoDetectTargets: this.autoDetectTargets,
         app_mode: this.app_mode,
-        dock_locked: this.dock_locked
+        dock_locked: this.dock_locked,
+        active_sort: this.active_sort
       };
       localStorage.setItem('balatro_companion_state_v1.2', JSON.stringify(stateObj));
     } catch (e) {
@@ -253,6 +263,7 @@ export class AppState {
     this.played_pool = [];
     this.remainingDeck = this.copyDeck(this.baselineDeck);
     this.dock_locked = false;
+    this.active_sort = 'none';
     this.notify();
   }
 
@@ -278,6 +289,13 @@ export class AppState {
     for (let i = 0; i < drawn.length; i++) {
       this.hand[i] = drawn[i];
     }
+    
+    if (this.active_sort === 'suit') {
+      this.sortHandBySuit(true);
+    } else if (this.active_sort === 'rank') {
+      this.sortHandByRank(true);
+    }
+    
     this.notify();
   }
 
@@ -303,6 +321,79 @@ export class AppState {
     for (let i = 0; i < drawn.length; i++) {
       const slotIdx = emptySlotsIndices[i];
       this.hand[slotIdx] = drawn[i];
+    }
+
+    if (this.active_sort === 'suit') {
+      this.sortHandBySuit(true);
+    } else if (this.active_sort === 'rank') {
+      this.sortHandByRank(true);
+    }
+  }
+
+  sortHandBySuit(skipNotify = false) {
+    const cards = this.hand.filter(c => c !== null);
+    
+    cards.sort((a, b) => {
+      const aStone = a.enhancement === 'Stone' || !a.base_rank || !a.base_suit;
+      const bStone = b.enhancement === 'Stone' || !b.base_rank || !b.base_suit;
+      
+      if (aStone && !bStone) return 1;
+      if (!aStone && bStone) return -1;
+      if (aStone && bStone) return 0;
+      
+      const suitDiff = SUIT_ORDER[a.base_suit] - SUIT_ORDER[b.base_suit];
+      if (suitDiff !== 0) return suitDiff;
+      
+      return RANK_TO_VAL[b.base_rank] - RANK_TO_VAL[a.base_rank];
+    });
+
+    while (cards.length < this.max_hand_size) {
+      cards.push(null);
+    }
+    this.hand = cards;
+    this.active_sort = 'suit';
+    if (!skipNotify) {
+      this.notify();
+    }
+  }
+
+  sortHandByRank(skipNotify = false) {
+    const cards = this.hand.filter(c => c !== null);
+    
+    cards.sort((a, b) => {
+      const aStone = a.enhancement === 'Stone' || !a.base_rank || !a.base_suit;
+      const bStone = b.enhancement === 'Stone' || !b.base_rank || !b.base_suit;
+      
+      if (aStone && !bStone) return 1;
+      if (!aStone && bStone) return -1;
+      if (aStone && bStone) return 0;
+      
+      const rankDiff = RANK_TO_VAL[b.base_rank] - RANK_TO_VAL[a.base_rank];
+      if (rankDiff !== 0) return rankDiff;
+      
+      return SUIT_ORDER[a.base_suit] - SUIT_ORDER[b.base_suit];
+    });
+
+    while (cards.length < this.max_hand_size) {
+      cards.push(null);
+    }
+    this.hand = cards;
+    this.active_sort = 'rank';
+    if (!skipNotify) {
+      this.notify();
+    }
+  }
+
+  toggleSortMode(sortType) {
+    if (this.active_sort === sortType) {
+      this.active_sort = 'none';
+      this.notify();
+    } else {
+      if (sortType === 'suit') {
+        this.sortHandBySuit();
+      } else if (sortType === 'rank') {
+        this.sortHandByRank();
+      }
     }
   }
 
@@ -403,6 +494,13 @@ export class AppState {
     const card = this.remainingDeck[remIdx];
     this.remainingDeck.splice(remIdx, 1);
     this.hand[emptyIdx] = card;
+
+    if (this.active_sort === 'suit') {
+      this.sortHandBySuit(true);
+    } else if (this.active_sort === 'rank') {
+      this.sortHandByRank(true);
+    }
+
     this.notify();
   }
 
@@ -441,6 +539,13 @@ export class AppState {
         this.hand.push(null);
       }
     }
+
+    if (this.active_sort === 'suit') {
+      this.sortHandBySuit(true);
+    } else if (this.active_sort === 'rank') {
+      this.sortHandByRank(true);
+    }
+
     this.notify();
   }
 

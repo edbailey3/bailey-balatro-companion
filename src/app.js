@@ -37,12 +37,19 @@ const modeLiveLabel = document.getElementById('mode-live-label');
 const modePracticeLabel = document.getElementById('mode-practice-label');
 const dockLockWarning = document.getElementById('dock-lock-warning');
 
+// Sort DOM References
+const sortSuitBtn = document.getElementById('sort-suit-btn');
+const sortRankBtn = document.getElementById('sort-rank-btn');
+
 // Setup Action Listeners
 resetBtn.addEventListener('click', () => state.resetToStandard());
 clearBtn.addEventListener('click', () => state.clearDeck());
 resetRoundBtn.addEventListener('click', () => state.resetRound());
 executeDiscardBtn.addEventListener('click', () => state.executeDiscard());
 executePlayBtn.addEventListener('click', () => state.executePlayHand());
+
+sortSuitBtn.addEventListener('click', () => state.toggleSortMode('suit'));
+sortRankBtn.addEventListener('click', () => state.toggleSortMode('rank'));
 
 modeToggleCheckbox.addEventListener('change', (e) => {
   const mode = e.target.checked ? 'practice' : 'live';
@@ -280,6 +287,18 @@ function renderHandDock() {
   const hasSelection = state.selectedForDiscard.size > 0 && !state.dock_locked;
   executeDiscardBtn.disabled = !hasSelection;
   executePlayBtn.disabled = !hasSelection;
+
+  // Update Sort buttons active states
+  if (state.active_sort === 'suit') {
+    sortSuitBtn.classList.add('active');
+    sortRankBtn.classList.remove('active');
+  } else if (state.active_sort === 'rank') {
+    sortSuitBtn.classList.remove('active');
+    sortRankBtn.classList.add('active');
+  } else {
+    sortSuitBtn.classList.remove('active');
+    sortRankBtn.classList.remove('active');
+  }
 }
 
 // Render Chasing Matrix and execute calculations
