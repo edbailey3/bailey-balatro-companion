@@ -760,3 +760,21 @@ h1 {
 .chasing-row.awaiting-refill .chasing-odds-percentage {
   color: var(--neon-gold);
 }
+
+/* Version 1.2 Card Inventory Lifecycle Additions */
+
+.matrix-cell.disabled {
+  opacity: 0.35;
+  filter: grayscale(80%);
+}
+
+.matrix-cell.disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.matrix-cell.disabled .matrix-cell-count-badge {
+  background: #374151;
+  color: var(--text-secondary);
+  box-shadow: none;
+}

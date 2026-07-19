@@ -1,5 +1,5 @@
 /**
- * State Management & Round Progression for Balatro Tactical Companion (v1.1)
+ * State Management & Round Progression for Balatro Tactical Companion (v1.2)
  */
 
 const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King', 'Ace'];
@@ -79,13 +79,16 @@ export class AppState {
 
   loadInitialState() {
     try {
-      const stored = localStorage.getItem('balatro_companion_state_v1.1');
+      const stored = localStorage.getItem('balatro_companion_state_v1.2');
       if (stored) {
         const parsed = JSON.parse(stored);
         this.baselineDeck = parsed.baselineDeck || createStandardDeck();
         this.remainingDeck = parsed.remainingDeck || this.copyDeck(this.baselineDeck);
         this.hand = parsed.hand || Array(8).fill(null);
         this.selectedForDiscard = new Set(parsed.selectedForDiscard || []);
+        
+        // Graveyard pool initialization
+        this.graveyard_pool = parsed.graveyard_pool || [];
         
         const defaultActive = ['Flush', 'Straight', 'Full House', 'Four of a Kind', 'Two Pair'];
         this.enabledHands = new Set(parsed.enabledHands || defaultActive);
@@ -99,11 +102,12 @@ export class AppState {
       console.error('Failed to load state from localStorage', e);
     }
 
-    // Default State Setup
+    // Default Setup
     this.baselineDeck = createStandardDeck();
     this.remainingDeck = this.copyDeck(this.baselineDeck);
     this.hand = Array(8).fill(null);
     this.selectedForDiscard = new Set();
+    this.graveyard_pool = [];
     this.enabledHands = new Set(['Flush', 'Straight', 'Full House', 'Four of a Kind', 'Two Pair']);
     this.targetParams = this.getDefaultParams();
     this.autoDetectTargets = true;
@@ -116,11 +120,12 @@ export class AppState {
         remainingDeck: this.remainingDeck,
         hand: this.hand,
         selectedForDiscard: Array.from(this.selectedForDiscard),
+        graveyard_pool: this.graveyard_pool,
         enabledHands: Array.from(this.enabledHands),
         targetParams: this.targetParams,
         autoDetectTargets: this.autoDetectTargets
       };
-      localStorage.setItem('balatro_companion_state_v1.1', JSON.stringify(stateObj));
+      localStorage.setItem('balatro_companion_state_v1.2', JSON.stringify(stateObj));
     } catch (e) {
       console.error('Failed to save state to localStorage', e);
     }
@@ -155,8 +160,6 @@ export class AppState {
   }
 
   validateState() {
-    // Clean hand elements: ensure any Card in hand still has a valid representation
-    // Ensure selectedForDiscard elements are still present in hand
     const handIds = new Set();
     for (const card of this.hand) {
       if (card) handIds.add(card.id);
@@ -170,51 +173,43 @@ export class AppState {
 
   // --- Stateful Round Progression Mutators ---
 
-  /**
-   * Resets baseline configurations to standard 52 and shuffles round.
-   */
   resetToStandard() {
     this.baselineDeck = createStandardDeck();
     this.remainingDeck = this.copyDeck(this.baselineDeck);
     this.hand = Array(8).fill(null);
     this.selectedForDiscard.clear();
+    this.graveyard_pool = [];
     this.enabledHands = new Set(['Flush', 'Straight', 'Full House', 'Four of a Kind', 'Two Pair']);
     this.autoDetectTargets = true;
     this.targetParams = this.getDefaultParams();
     this.notify();
   }
 
-  /**
-   * Empties baseline deck and clears hand dock.
-   */
   clearDeck() {
     this.baselineDeck = [];
     this.remainingDeck = [];
     this.hand = Array(8).fill(null);
     this.selectedForDiscard.clear();
+    this.graveyard_pool = [];
     this.notify();
   }
 
-  /**
-   * Performs the round reset: restores remainingDeck to baseline, empties hand.
-   */
   resetRound() {
     this.remainingDeck = this.copyDeck(this.baselineDeck);
     this.hand = Array(8).fill(null);
     this.selectedForDiscard.clear();
+    this.graveyard_pool = [];
     this.notify();
   }
 
-  /**
-   * Permanently discards selected cards from round.
-   */
   executeDiscard() {
     if (this.selectedForDiscard.size === 0) return;
 
     for (let i = 0; i < 8; i++) {
       const card = this.hand[i];
       if (card && this.selectedForDiscard.has(card.id)) {
-        this.hand[i] = null; // Leaves placeholder awaiting input
+        this.graveyard_pool.push(card); // Move to graveyard pool
+        this.hand[i] = null; // Awaiting refill
       }
     }
     this.selectedForDiscard.clear();
@@ -226,27 +221,29 @@ export class AppState {
   incrementDeckCard(rank, suit) {
     const card = createCard(rank, suit);
     this.baselineDeck.push(card);
-    // Also add to remaining deck so the new card is immediately in the round pool
     this.remainingDeck.push({ ...card });
     this.notify();
   }
 
   decrementDeckCard(rank, suit) {
-    // Remove from remaining deck first
     const remIdx = this.remainingDeck.findIndex(c => c.base_rank === rank && c.base_suit === suit);
     if (remIdx !== -1) {
       this.remainingDeck.splice(remIdx, 1);
     } else {
-      // If not in remaining deck, it must be held in the hand dock. Remove it.
       const handIdx = this.hand.findIndex(c => c && c.base_rank === rank && c.base_suit === suit);
       if (handIdx !== -1) {
         const cardToRemove = this.hand[handIdx];
         this.hand[handIdx] = null;
         this.selectedForDiscard.delete(cardToRemove.id);
+      } else {
+        // If not in hand or remaining, check graveyard
+        const graveIdx = this.graveyard_pool.findIndex(c => c.base_rank === rank && c.base_suit === suit);
+        if (graveIdx !== -1) {
+          this.graveyard_pool.splice(graveIdx, 1);
+        }
       }
     }
 
-    // Remove from baseline deck
     const baseIdx = this.baselineDeck.findIndex(c => c.base_rank === rank && c.base_suit === suit);
     if (baseIdx !== -1) {
       this.baselineDeck.splice(baseIdx, 1);
@@ -257,33 +254,23 @@ export class AppState {
   // --- Card Refills ---
 
   /**
-   * Frictionless refill draw mechanic.
+   * Refill slot - STRICT remainingDeck check, no auto-increment of baseline here.
    */
   addCardToHand(rank, suit) {
     const emptyIdx = this.hand.findIndex(c => c === null);
-    if (emptyIdx === -1) return; // Hand is already full
+    if (emptyIdx === -1) return; // Hand is full
 
-    // Look for matching card in remaining deck
     const remIdx = this.remainingDeck.findIndex(c => c.base_rank === rank && c.base_suit === suit);
-    let card;
-
-    if (remIdx !== -1) {
-      card = this.remainingDeck[remIdx];
-      this.remainingDeck.splice(remIdx, 1);
-    } else {
-      // Auto-increment baseline deck to avoid blockages
-      const newCard = createCard(rank, suit);
-      this.baselineDeck.push(newCard);
-      card = { ...newCard };
+    if (remIdx === -1) {
+      return; // STRICT BLOCK: Card is not available in the remaining deck!
     }
 
+    const card = this.remainingDeck[remIdx];
+    this.remainingDeck.splice(remIdx, 1);
     this.hand[emptyIdx] = card;
     this.notify();
   }
 
-  /**
-   * Removes card from hand and returns it to the remaining deck.
-   */
   removeCardFromHand(cardId) {
     const idx = this.hand.findIndex(c => c && c.id === cardId);
     if (idx !== -1) {
@@ -333,9 +320,6 @@ export class AppState {
     return this.hand.filter(c => c !== null && !this.selectedForDiscard.has(c.id));
   }
 
-  /**
-   * Auto-detection from kept card subset.
-   */
   detectTargets() {
     const kept = this.keptHand;
     const detected = this.getDefaultParams();

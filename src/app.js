@@ -49,20 +49,31 @@ autoDetectToggle.addEventListener('click', () => {
 function renderDeckMatrix() {
   matrixGridEl.innerHTML = '';
   
-  // Count baseline deck configurations
+  // Count remaining deck instances
   const countsMap = {};
-  for (const card of state.baselineDeck) {
+  for (const card of state.remainingDeck) {
     const key = `${card.base_rank}_${card.base_suit}`;
     countsMap[key] = (countsMap[key] || 0) + 1;
+  }
+
+  // Count baseline deck configurations
+  const baseCountsMap = {};
+  for (const card of state.baselineDeck) {
+    const key = `${card.base_rank}_${card.base_suit}`;
+    baseCountsMap[key] = (baseCountsMap[key] || 0) + 1;
   }
 
   for (const suit of SUITS) {
     for (const rank of RANKS) {
       const key = `${rank}_${suit}`;
       const count = countsMap[key] || 0;
+      const baseCount = baseCountsMap[key] || 0;
 
       const cell = document.createElement('div');
       cell.className = `matrix-cell suit-${suit.toLowerCase()}`;
+      if (count === 0) {
+        cell.classList.add('disabled');
+      }
       
       const rankSpan = document.createElement('span');
       rankSpan.className = 'matrix-cell-rank';
@@ -92,6 +103,7 @@ function renderDeckMatrix() {
       const minusBtn = document.createElement('button');
       minusBtn.className = 'adjuster-btn minus-btn';
       minusBtn.textContent = '-';
+      minusBtn.disabled = (baseCount === 0);
       minusBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         state.decrementDeckCard(rank, suit);
@@ -111,9 +123,12 @@ function renderDeckMatrix() {
       const drawBtn = document.createElement('button');
       drawBtn.className = 'adjuster-btn draw-btn';
       drawBtn.textContent = 'Draw';
+      drawBtn.disabled = (count === 0);
       drawBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        state.addCardToHand(rank, suit);
+        if (count > 0) {
+          state.addCardToHand(rank, suit);
+        }
       });
 
       container.appendChild(row);
@@ -122,7 +137,9 @@ function renderDeckMatrix() {
       cell.appendChild(adjusters);
 
       cell.addEventListener('click', () => {
-        state.addCardToHand(rank, suit);
+        if (count > 0) {
+          state.addCardToHand(rank, suit);
+        }
       });
 
       matrixGridEl.appendChild(cell);
@@ -653,7 +670,6 @@ function calculateHandOdds(handType, targets, N, n, kept, remDeck) {
   return { prob, KDisp, kDisp };
 }
 
-// Sync Auto-detect ON/OFF button highlight
 function syncHeaderUI() {
   if (state.autoDetectTargets) {
     autoDetectToggle.classList.add('active');
@@ -664,7 +680,6 @@ function syncHeaderUI() {
   }
 }
 
-// State subscription render loop
 state.subscribe((s) => {
   syncHeaderUI();
   renderDeckMatrix();
