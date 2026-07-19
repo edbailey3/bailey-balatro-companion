@@ -1,0 +1,15 @@
+{
+  "name": "bailey-balatro-companion",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node src/test_math.js"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
