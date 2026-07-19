@@ -89,9 +89,57 @@ assert(
   Math.abs(royalFlushProb - 0.000302) < 0.000001
 );
 
-console.log(`\n--- TESTS COMPLETE: ${passed} passed, ${failed} failed ---`);
-if (failed > 0) {
+// 7. AppState Dominant Suit Auto-Detection Tie-Breaking Test
+globalThis.localStorage = {
+  getItem: () => null,
+  setItem: () => {}
+};
+
+import('./state.js').then(({ AppState, createCard }) => {
+  const state = new AppState();
+  
+  // Set up hand with 2 Hearts and 2 Spades (a tie)
+  state.hand = [
+    createCard('Ace', 'Hearts'),
+    createCard('King', 'Hearts'),
+    createCard('Queen', 'Spades'),
+    createCard('Jack', 'Spades'),
+    null, null, null, null
+  ];
+  
+  // Scenario A: Remaining deck has more Spades than Hearts
+  state.remainingDeck = [
+    createCard('10', 'Spades'),
+    createCard('9', 'Spades'),
+    createCard('8', 'Hearts')
+  ];
+  
+  let detected = state.detectTargets();
+  assert(
+    `Tie-break dominant suit should be Spades when Spades have more remaining outs (2 vs 1)`,
+    detected.flush_suit === 'Spades'
+  );
+  
+  // Scenario B: Remaining deck has more Hearts than Spades
+  state.remainingDeck = [
+    createCard('10', 'Hearts'),
+    createCard('9', 'Hearts'),
+    createCard('8', 'Spades')
+  ];
+  
+  detected = state.detectTargets();
+  assert(
+    `Tie-break dominant suit should be Hearts when Hearts have more remaining outs (2 vs 1)`,
+    detected.flush_suit === 'Hearts'
+  );
+
+  console.log(`\n--- TESTS COMPLETE: ${passed} passed, ${failed} failed ---`);
+  if (failed > 0) {
+    process.exit(1);
+  } else {
+    process.exit(0);
+  }
+}).catch(err => {
+  console.error('Failed to run AppState test:', err);
   process.exit(1);
-} else {
-  process.exit(0);
-}
+});

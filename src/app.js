@@ -20,6 +20,11 @@ const resetBtn = document.getElementById('reset-btn');
 const clearBtn = document.getElementById('clear-btn');
 const resetRoundBtn = document.getElementById('reset-round-btn');
 const executeDiscardBtn = document.getElementById('execute-discard-btn');
+const executePlayBtn = document.getElementById('execute-play-btn');
+const handSizeValDisplay = document.getElementById('hand-size-val-display');
+const handSizeDecBtn = document.getElementById('hand-size-dec-btn');
+const handSizeIncBtn = document.getElementById('hand-size-inc-btn');
+const handSizeLockChk = document.getElementById('hand-size-lock-chk');
 const autoDetectToggle = document.getElementById('auto-detect-toggle');
 const chasingMatrixEl = document.getElementById('chasing-matrix');
 const globalTelemetryNEl = document.getElementById('global-telemetry-N');
@@ -31,6 +36,17 @@ resetBtn.addEventListener('click', () => state.resetToStandard());
 clearBtn.addEventListener('click', () => state.clearDeck());
 resetRoundBtn.addEventListener('click', () => state.resetRound());
 executeDiscardBtn.addEventListener('click', () => state.executeDiscard());
+executePlayBtn.addEventListener('click', () => state.executePlayHand());
+
+handSizeDecBtn.addEventListener('click', () => {
+  state.setMaxHandSize(state.max_hand_size - 1);
+});
+handSizeIncBtn.addEventListener('click', () => {
+  state.setMaxHandSize(state.max_hand_size + 1);
+});
+handSizeLockChk.addEventListener('change', (e) => {
+  state.setHandSizeLocked(e.target.checked);
+});
 
 autoDetectToggle.addEventListener('click', () => {
   const nextValue = !state.autoDetectTargets;
@@ -155,15 +171,16 @@ function getRankLabel(rank) {
   return rank;
 }
 
-// Render the 8-Slot Hand Dock
+// Render the variable-Slot Hand Dock
 function renderHandDock() {
   handDockEl.innerHTML = '';
+  handDockEl.style.gridTemplateColumns = `repeat(${state.max_hand_size}, 1fr)`;
   
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < state.max_hand_size; i++) {
     const slot = document.createElement('div');
     const card = state.hand[i];
     
-    if (card !== null) {
+    if (card !== null && card !== undefined) {
       slot.className = 'hand-slot';
       const isSelected = state.selectedForDiscard.has(card.id);
 
@@ -180,7 +197,7 @@ function renderHandDock() {
 
       const discardTag = document.createElement('div');
       discardTag.className = 'hand-card-discard-tag';
-      discardTag.textContent = 'DISCARD';
+      discardTag.textContent = 'SELECTED';
 
       const removeBtn = document.createElement('button');
       removeBtn.className = 'hand-card-remove-btn';
@@ -209,8 +226,16 @@ function renderHandDock() {
     handDockEl.appendChild(slot);
   }
 
-  // Update Execute Discard Button enable/disable state
-  executeDiscardBtn.disabled = (state.selectedForDiscard.size === 0);
+  // Update Hand Size Controls UI state
+  handSizeValDisplay.textContent = state.max_hand_size;
+  handSizeLockChk.checked = state.hand_size_locked;
+  handSizeDecBtn.disabled = (state.max_hand_size <= 1);
+  handSizeIncBtn.disabled = (state.max_hand_size >= 12);
+
+  // Update Action Buttons enable/disable state
+  const hasSelection = state.selectedForDiscard.size > 0;
+  executeDiscardBtn.disabled = !hasSelection;
+  executePlayBtn.disabled = !hasSelection;
 }
 
 // Render Chasing Matrix and execute calculations

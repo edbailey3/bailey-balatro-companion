@@ -25,15 +25,30 @@
         </div>
       </div>
 
-      <!-- Current Hand Dock (up to 8 cards) -->
+      <!-- Current Hand Dock -->
       <div class="hand-dock-container">
-        <p class="target-menu-label">Hand Dock (Select cards to Discard)</p>
+        <div class="hand-dock-header">
+          <p class="target-menu-label">Hand Dock (Select cards to Play/Discard)</p>
+          <div class="hand-size-controls-wrapper">
+            <span class="hand-size-label">Size: <span id="hand-size-val-display">8</span></span>
+            <button id="hand-size-dec-btn" class="adjuster-btn size-btn" title="Decrease Max Hand Size">-</button>
+            <button id="hand-size-inc-btn" class="adjuster-btn size-btn" title="Increase Max Hand Size">+</button>
+            <label class="lock-label" title="Lock hand size during round resets">
+              <input type="checkbox" id="hand-size-lock-chk" /> 🔒 Lock
+            </label>
+          </div>
+        </div>
         <div id="hand-dock" class="hand-dock">
           <!-- Dynamically populated via JS -->
         </div>
-        <button id="execute-discard-btn" class="action-btn discard-btn" disabled>
-          <span>🔥</span> Execute Discard
-        </button>
+        <div class="hand-actions-group">
+          <button id="execute-discard-btn" class="action-btn discard-btn" disabled>
+            <span>🔥</span> Execute Discard
+          </button>
+          <button id="execute-play-btn" class="action-btn play-btn" disabled>
+            <span>🃏</span> Play Hand
+          </button>
+        </div>
       </div>
 
       <!-- Actions Layout -->

@@ -698,15 +698,21 @@ h1 {
 
 /* Version 1.1 Round Progression Additions */
 
-.action-btn.discard-btn {
+.hand-actions-group {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
   width: 100%;
+}
+
+.action-btn.discard-btn {
+  flex: 1;
   background: var(--neon-red);
   color: #000;
   border: 1px solid var(--neon-red);
   font-weight: 800;
   font-size: 0.95rem;
   padding: 0.85rem;
-  margin-top: 0.75rem;
   border-radius: 8px;
   box-shadow: 0 0 15px rgba(255, 62, 62, 0.4);
 }
@@ -724,6 +730,91 @@ h1 {
   box-shadow: none;
   cursor: not-allowed;
   opacity: 0.4;
+}
+
+.action-btn.play-btn {
+  flex: 1;
+  background: var(--neon-blue);
+  color: #000;
+  border: 1px solid var(--neon-blue);
+  font-weight: 800;
+  font-size: 0.95rem;
+  padding: 0.85rem;
+  border-radius: 8px;
+  box-shadow: 0 0 15px rgba(0, 229, 255, 0.4);
+}
+
+.action-btn.play-btn:hover:not(:disabled) {
+  background: #55f3ff;
+  border-color: #55f3ff;
+  box-shadow: 0 0 25px rgba(0, 229, 255, 0.7);
+}
+
+.action-btn.play-btn:disabled {
+  background: rgba(30, 35, 50, 0.4);
+  color: var(--text-secondary);
+  border-color: var(--panel-border);
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* Hand Size Controls */
+.hand-dock-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
+.hand-dock-header .target-menu-label {
+  margin-bottom: 0;
+}
+
+.hand-size-controls-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(10, 11, 14, 0.4);
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+}
+
+.hand-size-label {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+#hand-size-val-display {
+  color: var(--neon-blue);
+  font-weight: 700;
+}
+
+.adjuster-btn.size-btn {
+  width: 20px;
+  height: 20px;
+  font-size: 0.75rem;
+}
+
+.lock-label {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  user-select: none;
+  margin-left: 4px;
+}
+
+.lock-label input[type="checkbox"] {
+  cursor: pointer;
+  accent-color: var(--neon-blue);
 }
 
 .action-btn.reset-round-btn:hover {

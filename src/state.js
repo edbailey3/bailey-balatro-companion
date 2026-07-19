@@ -84,11 +84,26 @@ export class AppState {
         const parsed = JSON.parse(stored);
         this.baselineDeck = parsed.baselineDeck || createStandardDeck();
         this.remainingDeck = parsed.remainingDeck || this.copyDeck(this.baselineDeck);
-        this.hand = parsed.hand || Array(8).fill(null);
+        
+        this.max_hand_size = parsed.max_hand_size !== undefined ? parsed.max_hand_size : 8;
+        this.hand_size_locked = parsed.hand_size_locked !== undefined ? parsed.hand_size_locked : false;
+        
+        this.hand = parsed.hand || Array(this.max_hand_size).fill(null);
+        if (this.hand.length !== this.max_hand_size) {
+          if (this.hand.length > this.max_hand_size) {
+            this.hand = this.hand.slice(0, this.max_hand_size);
+          } else {
+            while (this.hand.length < this.max_hand_size) {
+              this.hand.push(null);
+            }
+          }
+        }
+        
         this.selectedForDiscard = new Set(parsed.selectedForDiscard || []);
         
         // Graveyard pool initialization
         this.graveyard_pool = parsed.graveyard_pool || [];
+        this.played_pool = parsed.played_pool || [];
         
         const defaultActive = ['Flush', 'Straight', 'Full House', 'Four of a Kind', 'Two Pair'];
         this.enabledHands = new Set(parsed.enabledHands || defaultActive);
@@ -105,9 +120,12 @@ export class AppState {
     // Default Setup
     this.baselineDeck = createStandardDeck();
     this.remainingDeck = this.copyDeck(this.baselineDeck);
+    this.max_hand_size = 8;
+    this.hand_size_locked = false;
     this.hand = Array(8).fill(null);
     this.selectedForDiscard = new Set();
     this.graveyard_pool = [];
+    this.played_pool = [];
     this.enabledHands = new Set(['Flush', 'Straight', 'Full House', 'Four of a Kind', 'Two Pair']);
     this.targetParams = this.getDefaultParams();
     this.autoDetectTargets = true;
@@ -121,6 +139,9 @@ export class AppState {
         hand: this.hand,
         selectedForDiscard: Array.from(this.selectedForDiscard),
         graveyard_pool: this.graveyard_pool,
+        played_pool: this.played_pool,
+        max_hand_size: this.max_hand_size,
+        hand_size_locked: this.hand_size_locked,
         enabledHands: Array.from(this.enabledHands),
         targetParams: this.targetParams,
         autoDetectTargets: this.autoDetectTargets
@@ -176,9 +197,13 @@ export class AppState {
   resetToStandard() {
     this.baselineDeck = createStandardDeck();
     this.remainingDeck = this.copyDeck(this.baselineDeck);
-    this.hand = Array(8).fill(null);
+    if (!this.hand_size_locked) {
+      this.max_hand_size = 8;
+    }
+    this.hand = Array(this.max_hand_size).fill(null);
     this.selectedForDiscard.clear();
     this.graveyard_pool = [];
+    this.played_pool = [];
     this.enabledHands = new Set(['Flush', 'Straight', 'Full House', 'Four of a Kind', 'Two Pair']);
     this.autoDetectTargets = true;
     this.targetParams = this.getDefaultParams();
@@ -188,27 +213,49 @@ export class AppState {
   clearDeck() {
     this.baselineDeck = [];
     this.remainingDeck = [];
-    this.hand = Array(8).fill(null);
+    if (!this.hand_size_locked) {
+      this.max_hand_size = 8;
+    }
+    this.hand = Array(this.max_hand_size).fill(null);
     this.selectedForDiscard.clear();
     this.graveyard_pool = [];
+    this.played_pool = [];
     this.notify();
   }
 
   resetRound() {
     this.remainingDeck = this.copyDeck(this.baselineDeck);
-    this.hand = Array(8).fill(null);
+    if (!this.hand_size_locked) {
+      this.max_hand_size = 8;
+    }
+    this.hand = Array(this.max_hand_size).fill(null);
     this.selectedForDiscard.clear();
     this.graveyard_pool = [];
+    this.played_pool = [];
     this.notify();
   }
 
   executeDiscard() {
     if (this.selectedForDiscard.size === 0) return;
 
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < this.max_hand_size; i++) {
       const card = this.hand[i];
       if (card && this.selectedForDiscard.has(card.id)) {
         this.graveyard_pool.push(card); // Move to graveyard pool
+        this.hand[i] = null; // Awaiting refill
+      }
+    }
+    this.selectedForDiscard.clear();
+    this.notify();
+  }
+
+  executePlayHand() {
+    if (this.selectedForDiscard.size === 0) return;
+
+    for (let i = 0; i < this.max_hand_size; i++) {
+      const card = this.hand[i];
+      if (card && this.selectedForDiscard.has(card.id)) {
+        this.played_pool.push(card); // Move to played pool
         this.hand[i] = null; // Awaiting refill
       }
     }
@@ -240,6 +287,12 @@ export class AppState {
         const graveIdx = this.graveyard_pool.findIndex(c => c.base_rank === rank && c.base_suit === suit);
         if (graveIdx !== -1) {
           this.graveyard_pool.splice(graveIdx, 1);
+        } else {
+          // If not in graveyard, check played pool
+          const playIdx = this.played_pool.findIndex(c => c.base_rank === rank && c.base_suit === suit);
+          if (playIdx !== -1) {
+            this.played_pool.splice(playIdx, 1);
+          }
         }
       }
     }
@@ -282,6 +335,37 @@ export class AppState {
     this.notify();
   }
 
+  setMaxHandSize(newSize) {
+    if (newSize < 1 || newSize > 12) return;
+    
+    const oldSize = this.max_hand_size;
+    this.max_hand_size = newSize;
+
+    if (newSize < oldSize) {
+      // If hand size is decremented, drop right-most cards from the dock back into the deck pool (N)
+      for (let i = oldSize - 1; i >= newSize; i--) {
+        if (this.hand[i] !== undefined) {
+          const card = this.hand[i];
+          if (card !== null) {
+            this.remainingDeck.push(card);
+            this.selectedForDiscard.delete(card.id);
+          }
+        }
+      }
+      this.hand = this.hand.slice(0, newSize);
+    } else if (newSize > oldSize) {
+      while (this.hand.length < newSize) {
+        this.hand.push(null);
+      }
+    }
+    this.notify();
+  }
+
+  setHandSizeLocked(value) {
+    this.hand_size_locked = value;
+    this.notify();
+  }
+
   toggleDiscardSelection(cardId) {
     if (this.selectedForDiscard.has(cardId)) {
       this.selectedForDiscard.delete(cardId);
@@ -321,33 +405,42 @@ export class AppState {
   }
 
   detectTargets() {
-    const kept = this.keptHand;
+    const handCards = this.hand.filter(c => c !== null);
     const detected = this.getDefaultParams();
 
-    if (kept.length === 0) {
+    if (handCards.length === 0) {
       return detected;
     }
 
-    // 1. Suit counts
-    const suitCounts = {};
-    for (const card of kept) {
-      suitCounts[card.base_suit] = (suitCounts[card.base_suit] || 0) + 1;
-    }
-    let maxSuit = 'Spades';
-    let maxSuitCount = -1;
+    // Identify dominant suit in the hand dock
+    let dominantSuit = 'Spades';
+    let maxSuitFreq = -1;
+    let maxSuitOuts = -1;
+
     for (const suit of SUITS) {
-      if ((suitCounts[suit] || 0) > maxSuitCount) {
-        maxSuitCount = suitCounts[suit];
-        maxSuit = suit;
+      const freq = handCards.filter(c => c.base_suit === suit).length;
+      const outs = this.remainingDeck.filter(c => c.base_suit === suit).length;
+
+      if (freq > maxSuitFreq) {
+        maxSuitFreq = freq;
+        maxSuitOuts = outs;
+        dominantSuit = suit;
+      } else if (freq === maxSuitFreq) {
+        if (outs > maxSuitOuts) {
+          maxSuitOuts = outs;
+          dominantSuit = suit;
+        }
       }
     }
-    detected.flush_suit = maxSuit;
-    detected.flushhouse_suit = maxSuit;
-    detected.flushfive_suit = maxSuit;
+
+    detected.flush_suit = dominantSuit;
+    detected.flushhouse_suit = dominantSuit;
+    detected.flushfive_suit = dominantSuit;
     
+    // royal_suit detection
     const highRanksSet = new Set(['10', 'Jack', 'Queen', 'King', 'Ace']);
     const royalSuitCounts = {};
-    for (const card of kept) {
+    for (const card of handCards) {
       if (highRanksSet.has(card.base_rank)) {
         royalSuitCounts[card.base_suit] = (royalSuitCounts[card.base_suit] || 0) + 1;
       }
@@ -364,7 +457,7 @@ export class AppState {
 
     // 2. Rank counts
     const rankCounts = {};
-    for (const card of kept) {
+    for (const card of handCards) {
       rankCounts[card.base_rank] = (rankCounts[card.base_rank] || 0) + 1;
     }
     let maxRank = 'Ace';
@@ -396,7 +489,7 @@ export class AppState {
       detected.fh_rankB = detected.fh_rankA === 'Ace' ? 'King' : 'Ace';
     }
 
-    const suitCards = kept.filter(c => c.base_suit === maxSuit);
+    const suitCards = handCards.filter(c => c.base_suit === dominantSuit);
     const suitRankCounts = {};
     for (const card of suitCards) {
       suitRankCounts[card.base_rank] = (suitRankCounts[card.base_rank] || 0) + 1;
@@ -415,7 +508,7 @@ export class AppState {
     }
 
     // 4. Straight Range
-    const uniqueVals = Array.from(new Set(kept.map(c => RANK_TO_VAL[c.base_rank]))).sort((a, b) => a - b);
+    const uniqueVals = Array.from(new Set(handCards.map(c => RANK_TO_VAL[c.base_rank]))).sort((a, b) => a - b);
     if (uniqueVals.includes(14)) {
       uniqueVals.unshift(1);
     }
